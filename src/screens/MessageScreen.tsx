@@ -19,10 +19,22 @@ interface Message {
   senderName: string;
   isRead: boolean;
   createdAt: string;
+  bottleId?: string;
+  bottleContent?: string;
+  bottleSenderName?: string;
+}
+
+interface Conversation {
+  bottleId: string;
+  bottleContent: string;
+  bottleSenderName: string;
+  lastMessage: Message;
+  unreadCount: number;
+  totalMessages: number;
 }
 
 export default function MessageScreen() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -45,36 +57,101 @@ export default function MessageScreen() {
         senderName: msg.senderId === 'user123' ? '我' : '用户' + msg.senderId.slice(-4),
         isRead: msg.isRead,
         createdAt: msg.createdAt,
+        bottleId: msg.bottleId,
+        bottleContent: msg.bottleContent,
+        bottleSenderName: msg.bottleSenderName,
       }));
 
-      setMessages(formattedMessages);
+      // 按瓶子ID分组，创建对话列表
+      const conversationMap = new Map<string, Conversation>();
+      
+      formattedMessages.forEach(message => {
+        if (message.bottleId) {
+          if (!conversationMap.has(message.bottleId)) {
+            conversationMap.set(message.bottleId, {
+              bottleId: message.bottleId,
+              bottleContent: message.bottleContent || '未知瓶子内容',
+              bottleSenderName: message.bottleSenderName || '未知发送者',
+              lastMessage: message,
+              unreadCount: 0,
+              totalMessages: 0,
+            });
+          }
+          
+          const conversation = conversationMap.get(message.bottleId)!;
+          conversation.totalMessages++;
+          
+          // 更新最后一条消息（按时间排序）
+          if (new Date(message.createdAt) > new Date(conversation.lastMessage.createdAt)) {
+            conversation.lastMessage = message;
+          }
+          
+          // 计算未读消息数
+          if (!message.isRead && message.receiverId === 'user123') {
+            conversation.unreadCount++;
+          }
+        }
+      });
+
+      setConversations(Array.from(conversationMap.values()));
     } catch (error) {
       console.error('加载消息失败:', error);
       // 如果API失败，使用模拟数据
-      const mockMessages: Message[] = [
+      const mockConversations: Conversation[] = [
         {
-          _id: '1',
-          senderId: 'user1',
-          receiverId: 'user123',
-          content: '谢谢你捡到我的瓶子！很高兴认识你！',
-          senderName: '海边的旅行者',
-          isRead: false,
-          createdAt: new Date().toISOString(),
+          bottleId: 'bottle1',
+          bottleContent: '今天天气真好，希望有人能捡到我的瓶子，和我分享你的故事...',
+          bottleSenderName: '海边的旅行者',
+          lastMessage: {
+            _id: '1',
+            senderId: 'user1',
+            receiverId: 'user123',
+            content: '谢谢你捡到我的瓶子！很高兴认识你！',
+            senderName: '海边的旅行者',
+            isRead: false,
+            createdAt: new Date().toISOString(),
+            bottleId: 'bottle1',
+            bottleContent: '今天天气真好，希望有人能捡到我的瓶子，和我分享你的故事...',
+            bottleSenderName: '海边的旅行者',
+          },
+          unreadCount: 1,
+          totalMessages: 1,
+        },
+        {
+          bottleId: 'bottle2',
+          bottleContent: '我在寻找一个可以聊天的朋友，如果你看到这个瓶子，请回复我...',
+          bottleSenderName: '远方的朋友',
+          lastMessage: {
+            _id: '2',
+            senderId: 'user123',
+            receiverId: 'user2',
+            content: '很高兴认识你，希望我们能成为朋友！',
+            senderName: '我',
+            isRead: true,
+            createdAt: new Date(Date.now() - 86400000).toISOString(),
+            bottleId: 'bottle2',
+            bottleContent: '我在寻找一个可以聊天的朋友，如果你看到这个瓶子，请回复我...',
+            bottleSenderName: '远方的朋友',
+          },
+          unreadCount: 0,
+          totalMessages: 2,
         },
       ];
-      setMessages(mockMessages);
+      setConversations(mockConversations);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleMessagePress = async (message: Message) => {
+  const handleConversationPress = async (conversation: Conversation) => {
+    const message = conversation.lastMessage;
+    
     if (Platform.OS === 'web') {
-      alert(`消息详情:\n\n${message.content}`);
+      alert(`瓶子内容:\n${conversation.bottleContent}\n\n最后消息:\n${message.content}`);
     } else {
       Alert.alert(
-        '消息详情',
-        message.content,
+        '对话详情',
+        `瓶子内容:\n${conversation.bottleContent}\n\n最后消息:\n${message.content}`,
         [
           {
             text: '确定',
@@ -83,9 +160,11 @@ export default function MessageScreen() {
               if (!message.isRead && message.receiverId === 'user123') {
                 try {
                   await MessageService.markMessageAsRead(message._id);
-                  setMessages(prev => 
-                    prev.map(msg => 
-                      msg._id === message._id ? { ...msg, isRead: true } : msg
+                  setConversations(prev => 
+                    prev.map(conv => 
+                      conv.bottleId === conversation.bottleId 
+                        ? { ...conv, unreadCount: Math.max(0, conv.unreadCount - 1) }
+                        : conv
                     )
                   );
                 } catch (error) {
@@ -99,17 +178,33 @@ export default function MessageScreen() {
     }
   };
 
-  const filteredMessages = messages.filter(message => {
-    if (activeTab === 'received') {
-      return message.receiverId === 'user123';
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    
+    if (diff < 60000) { // 1分钟内
+      return '刚刚';
+    } else if (diff < 3600000) { // 1小时内
+      return `${Math.floor(diff / 60000)}分钟前`;
+    } else if (diff < 86400000) { // 24小时内
+      return `${Math.floor(diff / 3600000)}小时前`;
+    } else if (diff < 604800000) { // 7天内
+      return `${Math.floor(diff / 86400000)}天前`;
     } else {
-      return message.senderId === 'user123';
+      return date.toLocaleDateString();
+    }
+  };
+
+  const filteredConversations = conversations.filter(conversation => {
+    if (activeTab === 'received') {
+      return conversation.lastMessage.receiverId === 'user123';
+    } else {
+      return conversation.lastMessage.senderId === 'user123';
     }
   });
 
-  const unreadCount = messages.filter(msg => 
-    !msg.isRead && msg.receiverId === 'user123'
-  ).length;
+  const unreadCount = conversations.reduce((total, conv) => total + conv.unreadCount, 0);
 
   return (
     <View style={styles.container}>
@@ -142,7 +237,7 @@ export default function MessageScreen() {
       </View>
 
       <ScrollView style={styles.messagesContainer}>
-        {filteredMessages.length === 0 ? (
+        {filteredConversations.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="chatbubbles-outline" size={60} color="#ccc" />
             <Text style={styles.emptyText}>
@@ -156,46 +251,61 @@ export default function MessageScreen() {
             </Text>
           </View>
         ) : (
-          filteredMessages.map((message) => (
+          filteredConversations.map((conversation) => (
             <TouchableOpacity
-              key={message._id}
+              key={conversation.bottleId}
               style={[
-                styles.messageCard,
-                !message.isRead && message.receiverId === 'current_user' && styles.unreadMessage
+                styles.conversationCard,
+                conversation.unreadCount > 0 && styles.unreadConversation
               ]}
-              onPress={() => handleMessagePress(message)}
+              onPress={() => handleConversationPress(conversation)}
             >
-              <View style={styles.messageHeader}>
-                <View style={styles.senderInfo}>
+              <View style={styles.conversationHeader}>
+                <View style={styles.bottleInfo}>
                   <Ionicons 
-                    name="person-circle" 
-                    size={30} 
-                    color={message.senderId === 'current_user' ? '#4ECDC4' : '#007AFF'} 
+                    name="water" 
+                    size={24} 
+                    color="#007AFF" 
                   />
-                  <View style={styles.senderDetails}>
-                    <Text style={styles.senderName}>{message.senderName}</Text>
-                    <Text style={styles.messageTime}>
-                      {new Date(message.createdAt).toLocaleDateString()}
+                  <View style={styles.bottleDetails}>
+                    <Text style={styles.bottleSenderName}>{conversation.bottleSenderName}</Text>
+                    <Text style={styles.bottleTime}>
+                      {formatTime(conversation.lastMessage.createdAt)}
                     </Text>
                   </View>
                 </View>
-                {!message.isRead && message.receiverId === 'current_user' && (
-                  <View style={styles.unreadDot} />
+                {conversation.unreadCount > 0 && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadBadgeText}>{conversation.unreadCount}</Text>
+                  </View>
                 )}
               </View>
               
-              <Text style={styles.messageContent} numberOfLines={2}>
-                {message.content}
-              </Text>
+              <View style={styles.bottleContentContainer}>
+                <Text style={styles.bottleContentLabel}>瓶子内容:</Text>
+                <Text style={styles.bottleContent} numberOfLines={2}>
+                  {conversation.bottleContent}
+                </Text>
+              </View>
               
-              <View style={styles.messageFooter}>
+              <View style={styles.lastMessageContainer}>
+                <Text style={styles.lastMessageLabel}>最后消息:</Text>
+                <Text style={styles.lastMessageContent} numberOfLines={1}>
+                  {conversation.lastMessage.content}
+                </Text>
+              </View>
+              
+              <View style={styles.conversationFooter}>
                 <Ionicons 
-                  name={message.senderId === 'current_user' ? 'send' : 'mail'} 
-                  size={16} 
+                  name={conversation.lastMessage.senderId === 'user123' ? 'send' : 'mail'} 
+                  size={14} 
                   color="#666" 
                 />
                 <Text style={styles.messageType}>
-                  {message.senderId === 'current_user' ? '已发送' : '收到'}
+                  {conversation.lastMessage.senderId === 'user123' ? '我发送' : '收到回复'}
+                </Text>
+                <Text style={styles.messageCount}>
+                  {conversation.totalMessages}条消息
                 </Text>
               </View>
             </TouchableOpacity>
@@ -284,7 +394,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     lineHeight: 20,
   },
-  messageCard: {
+  conversationCard: {
     backgroundColor: 'white',
     borderRadius: 15,
     padding: 15,
@@ -295,53 +405,90 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  unreadMessage: {
+  unreadConversation: {
     borderLeftWidth: 4,
     borderLeftColor: '#007AFF',
   },
-  messageHeader: {
+  conversationHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  senderInfo: {
+  bottleInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  senderDetails: {
+  bottleDetails: {
     marginLeft: 10,
   },
-  senderName: {
+  bottleSenderName: {
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
   },
-  messageTime: {
+  bottleTime: {
     fontSize: 12,
     color: '#666',
     marginTop: 2,
   },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  unreadBadge: {
     backgroundColor: '#FF6B6B',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
   },
-  messageContent: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: '#333',
+  unreadBadgeText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  bottleContentContainer: {
     marginBottom: 10,
   },
-  messageFooter: {
+  bottleContentLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+    fontWeight: 'bold',
+  },
+  bottleContent: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#555',
+    fontStyle: 'italic',
+  },
+  lastMessageContainer: {
+    marginBottom: 10,
+  },
+  lastMessageLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+    fontWeight: 'bold',
+  },
+  lastMessageContent: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#333',
+  },
+  conversationFooter: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   messageType: {
     fontSize: 12,
     color: '#666',
     marginLeft: 5,
+    flex: 1,
+  },
+  messageCount: {
+    fontSize: 12,
+    color: '#999',
   },
 });
