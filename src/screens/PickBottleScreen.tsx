@@ -8,18 +8,22 @@ import {
   ScrollView,
   Modal,
   TextInput,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BottleService, MessageService } from '../services/bottleService';
 
 interface Bottle {
   _id: string;
   content: string;
   senderName: string;
+  senderId: string;
   createdAt: string;
   location: {
     latitude: number;
     longitude: number;
   };
+  isPicked: boolean;
 }
 
 export default function PickBottleScreen({ navigation, route }: any) {
@@ -28,54 +32,111 @@ export default function PickBottleScreen({ navigation, route }: any) {
   const [replyContent, setReplyContent] = useState('');
   const [isPicked, setIsPicked] = useState(false);
 
-  const handlePickBottle = () => {
-    Alert.alert(
-      '捡到瓶子！',
-      '你捡到了一个漂流瓶，是否要回复发送者？',
-      [
-        {
-          text: '不回复',
-          style: 'cancel',
-          onPress: () => {
-            setIsPicked(true);
-            setTimeout(() => {
-              Alert.alert('完成', '瓶子已捡起！');
-              navigation.goBack();
-            }, 1000);
-          }
-        },
-        {
-          text: '回复',
-          onPress: () => setShowReplyModal(true)
+  const handlePickBottle = async () => {
+    try {
+      // 先标记瓶子为已捡起
+      const result = await BottleService.pickBottle(bottle._id, 'picker_' + Date.now());
+      setIsPicked(true);
+
+      if (Platform.OS === 'web') {
+        const shouldReply = confirm('你捡到了一个漂流瓶，是否要回复发送者？');
+        if (shouldReply) {
+          setShowReplyModal(true);
+        } else {
+          alert('瓶子已捡起！');
+          setTimeout(() => {
+            navigation.goBack();
+          }, 1000);
         }
-      ]
-    );
+      } else {
+        Alert.alert(
+          '捡到瓶子！',
+          '你捡到了一个漂流瓶，是否要回复发送者？',
+          [
+            {
+              text: '不回复',
+              style: 'cancel',
+              onPress: () => {
+                Alert.alert('完成', '瓶子已捡起！');
+                setTimeout(() => {
+                  navigation.goBack();
+                }, 1000);
+              }
+            },
+            {
+              text: '回复',
+              onPress: () => setShowReplyModal(true)
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('捡瓶子失败:', error);
+      if (Platform.OS === 'web') {
+        alert('捡瓶子失败，请重试');
+      } else {
+        Alert.alert('错误', '捡瓶子失败，请重试');
+      }
+    }
   };
 
-  const handleSendReply = () => {
+  const handleSendReply = async () => {
     if (!replyContent.trim()) {
-      Alert.alert('提示', '请输入回复内容');
+      if (Platform.OS === 'web') {
+        alert('请输入回复内容');
+      } else {
+        Alert.alert('提示', '请输入回复内容');
+      }
       return;
     }
 
-    // 这里应该调用后端API发送消息
-    Alert.alert(
-      '回复成功！',
-      '你的回复已经发送给瓶子主人了！',
-      [
-        {
-          text: '确定',
-          onPress: () => {
-            setIsPicked(true);
-            setShowReplyModal(false);
-            setReplyContent('');
-            setTimeout(() => {
-              navigation.goBack();
-            }, 1000);
-          }
-        }
-      ]
-    );
+    try {
+      // 调用后端API发送消息
+      const result = await MessageService.sendMessage(
+        'picker_' + Date.now(), // 临时使用生成的ID
+        bottle.senderId, // 原发送者ID
+        replyContent.trim(),
+        bottle._id
+      );
+
+      console.log('消息发送成功:', result);
+
+      if (Platform.OS === 'web') {
+        alert('你的回复已经发送给瓶子主人了！');
+      } else {
+        Alert.alert(
+          '回复成功！',
+          '你的回复已经发送给瓶子主人了！',
+          [
+            {
+              text: '确定',
+              onPress: () => {
+                setIsPicked(true);
+                setShowReplyModal(false);
+                setReplyContent('');
+                setTimeout(() => {
+                  navigation.goBack();
+                }, 1000);
+              }
+            }
+          ]
+        );
+      }
+
+      setIsPicked(true);
+      setShowReplyModal(false);
+      setReplyContent('');
+      setTimeout(() => {
+        navigation.goBack();
+      }, 1000);
+    } catch (error) {
+      console.error('发送回复失败:', error);
+      if (Platform.OS === 'web') {
+        alert('发送回复失败，请重试');
+      } else {
+        Alert.alert('错误', '发送回复失败，请重试');
+      }
+    }
   };
 
   if (!bottle) {

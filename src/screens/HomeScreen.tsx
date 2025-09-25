@@ -7,9 +7,11 @@ import {
   ScrollView,
   Alert,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import { BottleService } from '../services/bottleService';
 
 const { width } = Dimensions.get('window');
 
@@ -17,16 +19,19 @@ interface Bottle {
   _id: string;
   content: string;
   senderName: string;
+  senderId: string;
   createdAt: string;
   location: {
     latitude: number;
     longitude: number;
   };
+  isPicked: boolean;
 }
 
 export default function HomeScreen({ navigation }: any) {
   const [location, setLocation] = useState<{latitude: number, longitude: number} | null>(null);
   const [nearbyBottles, setNearbyBottles] = useState<Bottle[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     getCurrentLocation();
@@ -34,6 +39,15 @@ export default function HomeScreen({ navigation }: any) {
 
   const getCurrentLocation = async () => {
     try {
+      // 在web环境中使用模拟位置
+      if (Platform.OS === 'web') {
+        setLocation({
+          latitude: 39.9042 + (Math.random() - 0.5) * 0.01,
+          longitude: 116.4074 + (Math.random() - 0.5) * 0.01,
+        });
+        return;
+      }
+
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('权限被拒绝', '需要位置权限来使用漂流瓶功能');
@@ -47,41 +61,52 @@ export default function HomeScreen({ navigation }: any) {
       });
     } catch (error) {
       console.error('获取位置失败:', error);
+      // 如果获取位置失败，使用默认位置
+      setLocation({
+        latitude: 39.9042,
+        longitude: 116.4074,
+      });
     }
   };
 
   const searchNearbyBottles = async () => {
     if (!location) {
-      Alert.alert('提示', '请先获取位置信息');
+      if (Platform.OS === 'web') {
+        alert('请先获取位置信息');
+      } else {
+        Alert.alert('提示', '请先获取位置信息');
+      }
       return;
     }
 
+    setIsLoading(true);
     try {
-      // 这里应该调用后端API
-      // const response = await fetch(`http://localhost:3000/api/bottles/pick?latitude=${location.latitude}&longitude=${location.longitude}`);
-      // const data = await response.json();
-      
-      // 模拟数据
-      const mockBottles: Bottle[] = [
-        {
-          _id: '1',
-          content: '今天天气真好，希望有人能捡到这个瓶子！',
-          senderName: '匿名用户',
-          createdAt: new Date().toISOString(),
-          location: { latitude: location.latitude + 0.001, longitude: location.longitude + 0.001 }
-        },
-        {
-          _id: '2',
-          content: '我在寻找一个可以聊天的朋友...',
-          senderName: '孤独的旅行者',
-          createdAt: new Date().toISOString(),
-          location: { latitude: location.latitude - 0.001, longitude: location.longitude + 0.002 }
+      // 调用后端API获取附近的瓶子
+      const bottles = await BottleService.searchNearbyBottles(location.latitude, location.longitude);
+      setNearbyBottles(bottles);
+
+      if (bottles.length === 0) {
+        if (Platform.OS === 'web') {
+          alert('附近暂时没有瓶子，试试扔一个瓶子吧！');
+        } else {
+          Alert.alert('提示', '附近暂时没有瓶子，试试扔一个瓶子吧！');
         }
-      ];
-      
-      setNearbyBottles(mockBottles);
+      } else {
+        if (Platform.OS === 'web') {
+          alert(`附近找到 ${bottles.length} 个瓶子`);
+        } else {
+          Alert.alert('找到瓶子', `附近找到 ${bottles.length} 个瓶子`);
+        }
+      }
     } catch (error) {
       console.error('搜索瓶子失败:', error);
+      if (Platform.OS === 'web') {
+        alert('搜索瓶子失败，请检查网络连接');
+      } else {
+        Alert.alert('错误', '搜索瓶子失败，请检查网络连接');
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -104,9 +129,10 @@ export default function HomeScreen({ navigation }: any) {
         <TouchableOpacity 
           style={[styles.button, styles.pickButton]}
           onPress={searchNearbyBottles}
+          disabled={isLoading}
         >
           <Ionicons name="search" size={24} color="white" />
-          <Text style={styles.buttonText}>捡瓶子</Text>
+          <Text style={styles.buttonText}>{isLoading ? '搜索中...' : '捡瓶子'}</Text>
         </TouchableOpacity>
       </View>
 

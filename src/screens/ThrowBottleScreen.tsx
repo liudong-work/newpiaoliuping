@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import { BottleService } from '../services/bottleService';
 
 export default function ThrowBottleScreen({ navigation }: any) {
   const [content, setContent] = useState('');
@@ -19,12 +20,20 @@ export default function ThrowBottleScreen({ navigation }: any) {
 
   const handleThrowBottle = async () => {
     if (!content.trim()) {
-      Alert.alert('提示', '请输入瓶子内容');
+      if (Platform.OS === 'web') {
+        alert('请输入瓶子内容');
+      } else {
+        Alert.alert('提示', '请输入瓶子内容');
+      }
       return;
     }
 
     if (content.length < 10) {
-      Alert.alert('提示', '瓶子内容至少需要10个字符');
+      if (Platform.OS === 'web') {
+        alert('瓶子内容至少需要10个字符');
+      } else {
+        Alert.alert('提示', '瓶子内容至少需要10个字符');
+      }
       return;
     }
 
@@ -32,36 +41,47 @@ export default function ThrowBottleScreen({ navigation }: any) {
 
     try {
       // 获取当前位置
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('权限被拒绝', '需要位置权限来扔瓶子');
-        setIsLoading(false);
-        return;
+      let location;
+      if (Platform.OS === 'web') {
+        // 在web环境中使用模拟位置
+        location = {
+          coords: {
+            latitude: 39.9042 + (Math.random() - 0.5) * 0.01,
+            longitude: 116.4074 + (Math.random() - 0.5) * 0.01,
+          }
+        };
+      } else {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('权限被拒绝', '需要位置权限来扔瓶子');
+          setIsLoading(false);
+          return;
+        }
+        location = await Location.getCurrentPositionAsync({});
       }
 
-      const location = await Location.getCurrentPositionAsync({});
-      
-      // 这里应该调用后端API
-      // const response = await fetch('http://localhost:3000/api/bottles', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Content-Type': 'application/json',
-      //   },
-      //   body: JSON.stringify({
-      //     content: content.trim(),
-      //     senderId: 'current_user_id',
-      //     senderName: '当前用户',
-      //     location: {
-      //       latitude: location.coords.latitude,
-      //       longitude: location.coords.longitude,
-      //     },
-      //   }),
-      // });
+      // 调用后端API保存瓶子
+      const result = await BottleService.throwBottle(
+        content.trim(),
+        'user_' + Date.now(), // 临时使用生成的ID
+        '用户' + Math.floor(Math.random() * 1000), // 临时使用生成的姓名
+        {
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        }
+      );
 
-      // 模拟成功
-      setTimeout(() => {
+      console.log('瓶子保存成功:', result);
+
+      if (Platform.OS === 'web') {
+        alert('瓶子已经扔到海里了！希望有人能捡到它。');
+        setContent('');
+        if (navigation && navigation.goBack) {
+          navigation.goBack();
+        }
+      } else {
         Alert.alert(
-          '成功！', 
+          '成功！',
           '瓶子已经扔到海里了！希望有人能捡到它。',
           [
             {
@@ -73,12 +93,16 @@ export default function ThrowBottleScreen({ navigation }: any) {
             }
           ]
         );
-        setIsLoading(false);
-      }, 1000);
+      }
 
     } catch (error) {
       console.error('扔瓶子失败:', error);
-      Alert.alert('错误', '扔瓶子失败，请重试');
+      if (Platform.OS === 'web') {
+        alert('扔瓶子失败，请重试');
+      } else {
+        Alert.alert('错误', '扔瓶子失败，请重试');
+      }
+    } finally {
       setIsLoading(false);
     }
   };

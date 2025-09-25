@@ -6,8 +6,10 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { MessageService } from '../services/bottleService';
 
 interface Message {
   _id: string;
@@ -22,86 +24,91 @@ interface Message {
 export default function MessageScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     loadMessages();
   }, []);
 
   const loadMessages = async () => {
+    setIsLoading(true);
     try {
-      // 这里应该调用后端API
-      // const response = await fetch('http://localhost:3000/api/users/current_user_id/messages');
-      // const data = await response.json();
+      // 调用后端API获取消息
+      const apiMessages = await MessageService.getUserMessages('user123'); // 临时使用固定用户ID
       
-      // 模拟数据
+      // 格式化消息数据
+      const formattedMessages: Message[] = apiMessages.map((msg: any) => ({
+        _id: msg._id,
+        senderId: msg.senderId,
+        receiverId: msg.receiverId,
+        content: msg.content,
+        senderName: msg.senderId === 'user123' ? '我' : '用户' + msg.senderId.slice(-4),
+        isRead: msg.isRead,
+        createdAt: msg.createdAt,
+      }));
+
+      setMessages(formattedMessages);
+    } catch (error) {
+      console.error('加载消息失败:', error);
+      // 如果API失败，使用模拟数据
       const mockMessages: Message[] = [
         {
           _id: '1',
           senderId: 'user1',
-          receiverId: 'current_user',
+          receiverId: 'user123',
           content: '谢谢你捡到我的瓶子！很高兴认识你！',
           senderName: '海边的旅行者',
           isRead: false,
           createdAt: new Date().toISOString(),
         },
-        {
-          _id: '2',
-          senderId: 'current_user',
-          receiverId: 'user2',
-          content: '你的瓶子很有趣，我们可以聊聊吗？',
-          senderName: '我',
-          isRead: true,
-          createdAt: new Date(Date.now() - 86400000).toISOString(),
-        },
-        {
-          _id: '3',
-          senderId: 'user3',
-          receiverId: 'current_user',
-          content: '你好！我收到了你的回复，很高兴认识你！',
-          senderName: '远方的朋友',
-          isRead: true,
-          createdAt: new Date(Date.now() - 172800000).toISOString(),
-        },
       ];
-      
       setMessages(mockMessages);
-    } catch (error) {
-      console.error('加载消息失败:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleMessagePress = (message: Message) => {
-    Alert.alert(
-      '消息详情',
-      message.content,
-      [
-        {
-          text: '确定',
-          onPress: () => {
-            // 标记为已读
-            if (!message.isRead && message.receiverId === 'current_user') {
-              setMessages(prev => 
-                prev.map(msg => 
-                  msg._id === message._id ? { ...msg, isRead: true } : msg
-                )
-              );
+  const handleMessagePress = async (message: Message) => {
+    if (Platform.OS === 'web') {
+      alert(`消息详情:\n\n${message.content}`);
+    } else {
+      Alert.alert(
+        '消息详情',
+        message.content,
+        [
+          {
+            text: '确定',
+            onPress: async () => {
+              // 标记为已读
+              if (!message.isRead && message.receiverId === 'user123') {
+                try {
+                  await MessageService.markMessageAsRead(message._id);
+                  setMessages(prev => 
+                    prev.map(msg => 
+                      msg._id === message._id ? { ...msg, isRead: true } : msg
+                    )
+                  );
+                } catch (error) {
+                  console.error('标记消息已读失败:', error);
+                }
+              }
             }
           }
-        }
-      ]
-    );
+        ]
+      );
+    }
   };
 
   const filteredMessages = messages.filter(message => {
     if (activeTab === 'received') {
-      return message.receiverId === 'current_user';
+      return message.receiverId === 'user123';
     } else {
-      return message.senderId === 'current_user';
+      return message.senderId === 'user123';
     }
   });
 
   const unreadCount = messages.filter(msg => 
-    !msg.isRead && msg.receiverId === 'current_user'
+    !msg.isRead && msg.receiverId === 'user123'
   ).length;
 
   return (

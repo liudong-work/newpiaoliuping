@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const mongoose = require('mongoose');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -9,49 +8,10 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.json());
 
-// 连接MongoDB
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/piaoliuping';
-mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
-
-// 用户模型
-const userSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
-  email: { type: String, required: true, unique: true },
-  avatar: String,
-  createdAt: { type: Date, default: Date.now }
-});
-
-// 瓶子模型
-const bottleSchema = new mongoose.Schema({
-  content: { type: String, required: true },
-  senderId: { type: String, required: true },
-  senderName: { type: String, required: true },
-  location: {
-    latitude: { type: Number, required: true },
-    longitude: { type: Number, required: true }
-  },
-  isPicked: { type: Boolean, default: false },
-  pickedBy: String,
-  pickedAt: Date,
-  createdAt: { type: Date, default: Date.now }
-});
-
-// 消息模型
-const messageSchema = new mongoose.Schema({
-  senderId: { type: String, required: true },
-  receiverId: { type: String, required: true },
-  content: { type: String, required: true },
-  bottleId: String,
-  isRead: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now }
-});
-
-const User = mongoose.model('User', userSchema);
-const Bottle = mongoose.model('Bottle', bottleSchema);
-const Message = mongoose.model('Message', messageSchema);
+// 内存存储（简化版本，不依赖MongoDB）
+let bottles = [];
+let messages = [];
+let users = [];
 
 // 测试路由
 app.get('/', (req, res) => {
@@ -68,20 +28,26 @@ app.get('/', (req, res) => {
 });
 
 // 用户相关接口
-app.post('/api/users/register', async (req, res) => {
+app.post('/api/users/register', (req, res) => {
   try {
     const { username, email, avatar } = req.body;
-    const user = new User({ username, email, avatar });
-    await user.save();
+    const user = {
+      _id: 'user_' + Date.now(),
+      username,
+      email,
+      avatar,
+      createdAt: new Date().toISOString()
+    };
+    users.push(user);
     res.status(201).json({ message: '用户注册成功', user });
   } catch (error) {
     res.status(400).json({ message: '注册失败', error: error.message });
   }
 });
 
-app.get('/api/users/:userId', async (req, res) => {
+app.get('/api/users/:userId', (req, res) => {
   try {
-    const user = await User.findById(req.params.userId);
+    const user = users.find(u => u._id === req.params.userId);
     if (!user) {
       return res.status(404).json({ message: '用户不存在' });
     }
@@ -92,38 +58,50 @@ app.get('/api/users/:userId', async (req, res) => {
 });
 
 // 瓶子相关接口
-app.post('/api/bottles', async (req, res) => {
+app.post('/api/bottles', (req, res) => {
   try {
     const { content, senderId, senderName, location } = req.body;
-    const bottle = new Bottle({ content, senderId, senderName, location });
-    await bottle.save();
+
+    const bottle = {
+      _id: 'bottle_' + Date.now(),
+      content,
+      senderId,
+      senderName,
+      location,
+      isPicked: false,
+      createdAt: new Date().toISOString()
+    };
+
+    bottles.push(bottle);
     console.log('新瓶子已扔出:', bottle);
+
     res.status(201).json({ message: '瓶子已扔出', bottleId: bottle._id });
   } catch (error) {
     res.status(500).json({ message: '服务器错误', error: error.message });
   }
 });
 
-app.get('/api/bottles/pick', async (req, res) => {
+app.get('/api/bottles/pick', (req, res) => {
   try {
     const { latitude, longitude } = req.query;
-    
+
     // 查找未捡的瓶子
-    const availableBottles = await Bottle.find({ isPicked: false });
+    const availableBottles = bottles.filter(bottle => !bottle.isPicked);
+
     console.log('可用瓶子数量:', availableBottles.length);
-    
+
     res.json({ bottles: availableBottles });
   } catch (error) {
     res.status(500).json({ message: '服务器错误', error: error.message });
   }
 });
 
-app.post('/api/bottles/:id/pick', async (req, res) => {
+app.post('/api/bottles/:id/pick', (req, res) => {
   try {
     const { id } = req.params;
     const { pickerId } = req.body;
 
-    const bottle = await Bottle.findById(id);
+    const bottle = bottles.find(b => b._id === id);
     if (!bottle) {
       return res.status(404).json({ message: '瓶子不存在' });
     }
@@ -134,20 +112,19 @@ app.post('/api/bottles/:id/pick', async (req, res) => {
 
     bottle.isPicked = true;
     bottle.pickedBy = pickerId;
-    bottle.pickedAt = new Date();
-    await bottle.save();
-    
+    bottle.pickedAt = new Date().toISOString();
     console.log('瓶子已捡起:', bottle);
+
     res.json({ message: '成功捡起瓶子', bottle });
   } catch (error) {
     res.status(500).json({ message: '服务器错误', error: error.message });
   }
 });
 
-app.get('/api/users/:userId/bottles', async (req, res) => {
+app.get('/api/users/:userId/bottles', (req, res) => {
   try {
     const { userId } = req.params;
-    const userBottles = await Bottle.find({ senderId: userId });
+    const userBottles = bottles.filter(bottle => bottle.senderId === userId);
     res.json({ bottles: userBottles });
   } catch (error) {
     res.status(500).json({ message: '服务器错误', error: error.message });
@@ -155,13 +132,12 @@ app.get('/api/users/:userId/bottles', async (req, res) => {
 });
 
 // 消息相关接口
-app.get('/api/users/:userId/messages', async (req, res) => {
+app.get('/api/users/:userId/messages', (req, res) => {
   try {
     const { userId } = req.params;
-    const userMessages = await Message.find({
-      $or: [{ senderId: userId }, { receiverId: userId }]
-    }).sort({ createdAt: -1 });
-    
+    const userMessages = messages.filter(msg =>
+      msg.senderId === userId || msg.receiverId === userId
+    );
     console.log(`用户 ${userId} 的消息数量: ${userMessages.length}`);
     res.json({ messages: userMessages });
   } catch (error) {
@@ -169,32 +145,39 @@ app.get('/api/users/:userId/messages', async (req, res) => {
   }
 });
 
-app.post('/api/messages', async (req, res) => {
+app.post('/api/messages', (req, res) => {
   try {
     const { senderId, receiverId, content, bottleId } = req.body;
-    const message = new Message({ senderId, receiverId, content, bottleId });
-    await message.save();
-    
+
+    const message = {
+      _id: 'message_' + Date.now(),
+      senderId,
+      receiverId,
+      content,
+      bottleId,
+      isRead: false,
+      createdAt: new Date().toISOString()
+    };
+
+    messages.push(message);
     console.log('新消息已发送:', message);
+
     res.status(201).json({ message: '消息发送成功', messageId: message._id });
   } catch (error) {
     res.status(500).json({ message: '服务器错误', error: error.message });
   }
 });
 
-app.put('/api/messages/:messageId/read', async (req, res) => {
+app.put('/api/messages/:messageId/read', (req, res) => {
   try {
     const { messageId } = req.params;
-    const message = await Message.findByIdAndUpdate(
-      messageId, 
-      { isRead: true }, 
-      { new: true }
-    );
+    const message = messages.find(m => m._id === messageId);
     
     if (!message) {
       return res.status(404).json({ message: '消息不存在' });
     }
     
+    message.isRead = true;
     res.json({ message: '消息已标记为已读', message });
   } catch (error) {
     res.status(500).json({ message: '服务器错误', error: error.message });
@@ -215,5 +198,5 @@ app.use('*', (req, res) => {
 app.listen(PORT, () => {
   console.log(`服务器运行在端口 ${PORT}`);
   console.log(`访问 http://localhost:${PORT} 测试服务器`);
-  console.log(`MongoDB连接: ${MONGODB_URI}`);
+  console.log('使用内存存储（无需MongoDB）');
 });
