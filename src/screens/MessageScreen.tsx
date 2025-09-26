@@ -9,7 +9,7 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { MessageService } from '../services/bottleService';
+import { MessageService, BottleService } from '../services/bottleService';
 
 interface Message {
   _id: string;
