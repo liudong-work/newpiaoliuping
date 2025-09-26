@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MessageService, BottleService } from '../services/bottleService';
+import ApiService from '../services/api';
 
 interface Message {
   _id: string;
@@ -35,7 +36,6 @@ interface Conversation {
 
 export default function MessageScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
   const [isLoading, setIsLoading] = useState(false);
   const [bottles, setBottles] = useState<any[]>([]);
 
@@ -53,15 +53,15 @@ export default function MessageScreen() {
       // 获取所有消息和瓶子
       const [allMessages, allBottles] = await Promise.all([
         MessageService.getAllMessages(),
-        BottleService.getAllBottles()
+        ApiService.bottle.getAll()
       ]);
       
-      setBottles(allBottles);
+      setBottles(allBottles.bottles);
       
       // 格式化消息数据，并添加瓶子信息
       const formattedMessages: Message[] = allMessages.map((msg: any) => {
         // 从消息中提取瓶子信息（如果后端没有提供，我们需要从瓶子ID获取）
-        const bottleInfo = getBottleInfo(msg.bottleId);
+        const bottleInfo = allBottles.bottles.find((bottle: any) => bottle._id === msg.bottleId);
         
         return {
           _id: msg._id,
@@ -101,58 +101,16 @@ export default function MessageScreen() {
             conversation.lastMessage = message;
           }
           
-          // 计算未读消息数
-          if (!message.isRead && message.receiverId === 'user123') {
-            conversation.unreadCount++;
-          }
+          // 计算未读消息数 - 显示所有有回复的对话，不区分用户
+          // 暂时不计算未读数量，显示所有对话
         }
       });
 
       setConversations(Array.from(conversationMap.values()));
     } catch (error) {
       console.error('加载消息失败:', error);
-      // 如果API失败，使用模拟数据
-      const mockConversations: Conversation[] = [
-        {
-          bottleId: 'bottle1',
-          bottleContent: '今天天气真好，希望有人能捡到我的瓶子，和我分享你的故事...',
-          bottleSenderName: '海边的旅行者',
-          lastMessage: {
-            _id: '1',
-            senderId: 'user1',
-            receiverId: 'user123',
-            content: '谢谢你捡到我的瓶子！很高兴认识你！',
-            senderName: '海边的旅行者',
-            isRead: false,
-            createdAt: new Date().toISOString(),
-            bottleId: 'bottle1',
-            bottleContent: '今天天气真好，希望有人能捡到我的瓶子，和我分享你的故事...',
-            bottleSenderName: '海边的旅行者',
-          },
-          unreadCount: 1,
-          totalMessages: 1,
-        },
-        {
-          bottleId: 'bottle2',
-          bottleContent: '我在寻找一个可以聊天的朋友，如果你看到这个瓶子，请回复我...',
-          bottleSenderName: '远方的朋友',
-          lastMessage: {
-            _id: '2',
-            senderId: 'user123',
-            receiverId: 'user2',
-            content: '很高兴认识你，希望我们能成为朋友！',
-            senderName: '我',
-            isRead: true,
-            createdAt: new Date(Date.now() - 86400000).toISOString(),
-            bottleId: 'bottle2',
-            bottleContent: '我在寻找一个可以聊天的朋友，如果你看到这个瓶子，请回复我...',
-            bottleSenderName: '远方的朋友',
-          },
-          unreadCount: 0,
-          totalMessages: 2,
-        },
-      ];
-      setConversations(mockConversations);
+      // 如果API失败，显示空列表
+      setConversations([]);
     } finally {
       setIsLoading(false);
     }
@@ -171,20 +129,11 @@ export default function MessageScreen() {
           {
             text: '确定',
             onPress: async () => {
-              // 标记为已读
-              if (!message.isRead && message.receiverId === 'user123') {
-                try {
-                  await MessageService.markMessageAsRead(message._id);
-                  setConversations(prev => 
-                    prev.map(conv => 
-                      conv.bottleId === conversation.bottleId 
-                        ? { ...conv, unreadCount: Math.max(0, conv.unreadCount - 1) }
-                        : conv
-                    )
-                  );
-                } catch (error) {
-                  console.error('标记消息已读失败:', error);
-                }
+              // 标记为已读 - 暂时跳过，因为不计算未读数量
+              try {
+                await MessageService.markMessageAsRead(message._id);
+              } catch (error) {
+                console.error('标记消息已读失败:', error);
               }
             }
           }
@@ -211,20 +160,20 @@ export default function MessageScreen() {
     }
   };
 
-  const filteredConversations = conversations.filter(conversation => {
-    if (activeTab === 'received') {
-      return conversation.lastMessage.receiverId === 'user123';
-    } else {
-      return conversation.lastMessage.senderId === 'user123';
-    }
-  });
+  // 显示所有有回复的对话，不区分收到和发送
+  const filteredConversations = conversations;
 
   const unreadCount = conversations.reduce((total, conv) => total + conv.unreadCount, 0);
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>💬 消息</Text>
+        <View style={styles.headerContent}>
+          <View style={styles.bottleIcon}>
+            <Ionicons name="water" size={32} color="#4A90E2" />
+          </View>
+          <Text style={styles.title}>漂流瓶消息列表</Text>
+        </View>
         {unreadCount > 0 && (
           <View style={styles.badge}>
             <Text style={styles.badgeText}>{unreadCount}</Text>
@@ -232,37 +181,16 @@ export default function MessageScreen() {
         )}
       </View>
 
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'received' && styles.activeTab]}
-          onPress={() => setActiveTab('received')}
-        >
-          <Text style={[styles.tabText, activeTab === 'received' && styles.activeTabText]}>
-            收到的消息
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, activeTab === 'sent' && styles.activeTab]}
-          onPress={() => setActiveTab('sent')}
-        >
-          <Text style={[styles.tabText, activeTab === 'sent' && styles.activeTabText]}>
-            发送的消息
-          </Text>
-        </TouchableOpacity>
-      </View>
 
       <ScrollView style={styles.messagesContainer}>
         {filteredConversations.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="chatbubbles-outline" size={60} color="#ccc" />
             <Text style={styles.emptyText}>
-              {activeTab === 'received' ? '还没有收到消息' : '还没有发送消息'}
+              还没有回复过的瓶子
             </Text>
             <Text style={styles.emptySubtext}>
-              {activeTab === 'received' 
-                ? '捡到瓶子并回复后，这里会显示收到的消息' 
-                : '回复瓶子后，这里会显示你发送的消息'
-              }
+              捡到瓶子并回复后，这里会显示你的对话记录
             </Text>
           </View>
         ) : (
@@ -270,59 +198,29 @@ export default function MessageScreen() {
             <TouchableOpacity
               key={conversation.bottleId}
               style={[
-                styles.conversationCard,
-                conversation.unreadCount > 0 && styles.unreadConversation
+                styles.messageCard,
+                conversation.unreadCount > 0 && styles.unreadMessage
               ]}
               onPress={() => handleConversationPress(conversation)}
             >
-              <View style={styles.conversationHeader}>
-                <View style={styles.bottleInfo}>
-                  <Ionicons 
-                    name="water" 
-                    size={24} 
-                    color="#007AFF" 
-                  />
-                  <View style={styles.bottleDetails}>
-                    <Text style={styles.bottleSenderName}>{conversation.bottleSenderName}</Text>
-                    <Text style={styles.bottleTime}>
-                      {formatTime(conversation.lastMessage.createdAt)}
-                    </Text>
-                  </View>
+              <View style={styles.avatarContainer}>
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>
+                    {conversation.bottleSenderName.charAt(0)}
+                  </Text>
                 </View>
-                {conversation.unreadCount > 0 && (
-                  <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadBadgeText}>{conversation.unreadCount}</Text>
-                  </View>
-                )}
               </View>
               
-              <View style={styles.bottleContentContainer}>
-                <Text style={styles.bottleContentLabel}>瓶子内容:</Text>
-                <Text style={styles.bottleContent} numberOfLines={2}>
-                  {conversation.bottleContent}
-                </Text>
-              </View>
-              
-              <View style={styles.lastMessageContainer}>
-                <Text style={styles.lastMessageLabel}>最后消息:</Text>
-                <Text style={styles.lastMessageContent} numberOfLines={1}>
+              <View style={styles.messageContent}>
+                <Text style={styles.senderName}>{conversation.bottleSenderName}</Text>
+                <Text style={styles.messageText} numberOfLines={2}>
                   {conversation.lastMessage.content}
                 </Text>
               </View>
               
-              <View style={styles.conversationFooter}>
-                <Ionicons 
-                  name={conversation.lastMessage.senderId === 'user123' ? 'send' : 'mail'} 
-                  size={14} 
-                  color="#666" 
-                />
-                <Text style={styles.messageType}>
-                  {conversation.lastMessage.senderId === 'user123' ? '我发送' : '收到回复'}
-                </Text>
-                <Text style={styles.messageCount}>
-                  {conversation.totalMessages}条消息
-                </Text>
-              </View>
+              {conversation.unreadCount > 0 && (
+                <View style={styles.unreadDot} />
+              )}
             </TouchableOpacity>
           ))
         )}
@@ -334,19 +232,34 @@ export default function MessageScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f8ff',
+    backgroundColor: '#f8f9fa',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     padding: 20,
-    backgroundColor: '#007AFF',
+    backgroundColor: '#ffffff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bottleIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#e3f2fd',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: 'white',
+    color: '#2c3e50',
   },
   badge: {
     backgroundColor: '#FF6B6B',
@@ -362,34 +275,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 'bold',
   },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: 'white',
-    marginHorizontal: 20,
-    marginTop: 20,
-    borderRadius: 25,
-    padding: 4,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 20,
-  },
-  activeTab: {
-    backgroundColor: '#007AFF',
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#666',
-  },
-  activeTabText: {
-    color: 'white',
-  },
   messagesContainer: {
     flex: 1,
-    padding: 20,
+    padding: 16,
   },
   emptyContainer: {
     alignItems: 'center',
@@ -409,101 +297,58 @@ const styles = StyleSheet.create({
     marginTop: 10,
     lineHeight: 20,
   },
-  conversationCard: {
+  messageCard: {
     backgroundColor: 'white',
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 15,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
   },
-  unreadConversation: {
-    borderLeftWidth: 4,
-    borderLeftColor: '#007AFF',
+  unreadMessage: {
+    borderLeftWidth: 3,
+    borderLeftColor: '#4A90E2',
   },
-  conversationHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+  avatarContainer: {
+    marginRight: 12,
   },
-  bottleInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  bottleDetails: {
-    marginLeft: 10,
-  },
-  bottleSenderName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  bottleTime: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
-  },
-  unreadBadge: {
-    backgroundColor: '#FF6B6B',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
+  avatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#4A90E2',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 6,
   },
-  unreadBadgeText: {
+  avatarText: {
     color: 'white',
-    fontSize: 12,
+    fontSize: 18,
     fontWeight: 'bold',
   },
-  bottleContentContainer: {
-    marginBottom: 10,
-  },
-  bottleContentLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-    fontWeight: 'bold',
-  },
-  bottleContent: {
-    fontSize: 14,
-    lineHeight: 18,
-    color: '#555',
-    fontStyle: 'italic',
-  },
-  lastMessageContainer: {
-    marginBottom: 10,
-  },
-  lastMessageLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 4,
-    fontWeight: 'bold',
-  },
-  lastMessageContent: {
-    fontSize: 14,
-    lineHeight: 18,
-    color: '#333',
-  },
-  conversationFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  messageType: {
-    fontSize: 12,
-    color: '#666',
-    marginLeft: 5,
+  messageContent: {
     flex: 1,
   },
-  messageCount: {
-    fontSize: 12,
-    color: '#999',
+  senderName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2c3e50',
+    marginBottom: 4,
+  },
+  messageText: {
+    fontSize: 14,
+    color: '#6c757d',
+    lineHeight: 20,
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#4A90E2',
+    marginLeft: 8,
   },
 });

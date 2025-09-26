@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BottleService, MessageService } from '../services/bottleService';
+import * as Location from 'expo-location';
 
 interface Bottle {
   _id: string;
@@ -28,14 +29,83 @@ interface Bottle {
 
 export default function PickBottleScreen({ navigation, route }: any) {
   const { bottle }: { bottle: Bottle } = route.params || {};
+  const [currentBottle, setCurrentBottle] = useState<Bottle | null>(bottle || null);
   const [showReplyModal, setShowReplyModal] = useState(false);
   const [replyContent, setReplyContent] = useState('');
   const [isPicked, setIsPicked] = useState(false);
+  const [isSearching, setIsSearching] = useState(!bottle);
+
+  useEffect(() => {
+    if (!bottle) {
+      searchNearbyBottles();
+    }
+  }, []);
+
+  const searchNearbyBottles = async () => {
+    setIsSearching(true);
+    try {
+      let location;
+      if (Platform.OS === 'web') {
+        // Web平台使用模拟位置
+        location = {
+          latitude: 39.9042,
+          longitude: 116.4074,
+        };
+      } else {
+        // 获取当前位置
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          if (Platform.OS === 'web') {
+            alert('需要位置权限来搜索附近的瓶子');
+          } else {
+            Alert.alert('权限错误', '需要位置权限来搜索附近的瓶子');
+          }
+          return;
+        }
+        const locationData = await Location.getCurrentPositionAsync({});
+        location = {
+          latitude: locationData.coords.latitude,
+          longitude: locationData.coords.longitude,
+        };
+      }
+
+      const bottles = await BottleService.searchNearbyBottles(location.latitude, location.longitude);
+      
+      if (bottles.length > 0) {
+        // 随机选择一个瓶子
+        const randomBottle = bottles[Math.floor(Math.random() * bottles.length)];
+        setCurrentBottle(randomBottle);
+        setIsPicked(randomBottle.isPicked);
+      } else {
+        if (Platform.OS === 'web') {
+          alert('附近没有找到瓶子，试试其他地方吧！');
+        } else {
+          Alert.alert('没有瓶子', '附近没有找到瓶子，试试其他地方吧！');
+        }
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('Sea');
+        }
+      }
+    } catch (error) {
+      console.error('搜索瓶子失败:', error);
+      if (Platform.OS === 'web') {
+        alert('搜索瓶子失败，请重试');
+      } else {
+        Alert.alert('错误', '搜索瓶子失败，请重试');
+      }
+      navigation.goBack();
+    } finally {
+      setIsSearching(false);
+    }
+  };
 
   const handlePickBottle = async () => {
+    if (!currentBottle) return;
     try {
       // 先标记瓶子为已捡起
-      const result = await BottleService.pickBottle(bottle._id, 'picker_' + Date.now());
+      const result = await BottleService.pickBottle(currentBottle._id, 'picker_' + Date.now());
       setIsPicked(true);
 
       if (Platform.OS === 'web') {
@@ -45,7 +115,11 @@ export default function PickBottleScreen({ navigation, route }: any) {
         } else {
           alert('瓶子已捡起！');
           setTimeout(() => {
-            navigation.goBack();
+            if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('Sea');
+        }
           }, 1000);
         }
       } else {
@@ -59,7 +133,11 @@ export default function PickBottleScreen({ navigation, route }: any) {
               onPress: () => {
                 Alert.alert('完成', '瓶子已捡起！');
                 setTimeout(() => {
-                  navigation.goBack();
+                  if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('Sea');
+        }
                 }, 1000);
               }
             },
@@ -81,7 +159,7 @@ export default function PickBottleScreen({ navigation, route }: any) {
   };
 
   const handleSendReply = async () => {
-    if (!replyContent.trim()) {
+    if (!replyContent.trim() || !currentBottle) {
       if (Platform.OS === 'web') {
         alert('请输入回复内容');
       } else {
@@ -94,9 +172,9 @@ export default function PickBottleScreen({ navigation, route }: any) {
       // 调用后端API发送消息
       const result = await MessageService.sendMessage(
         'picker_' + Date.now(), // 临时使用生成的ID
-        bottle.senderId, // 原发送者ID
+        currentBottle.senderId, // 原发送者ID
         replyContent.trim(),
-        bottle._id
+        currentBottle._id
       );
 
       console.log('消息发送成功:', result);
@@ -115,7 +193,11 @@ export default function PickBottleScreen({ navigation, route }: any) {
                 setShowReplyModal(false);
                 setReplyContent('');
                 setTimeout(() => {
-                  navigation.goBack();
+                  if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('Sea');
+        }
                 }, 1000);
               }
             }
@@ -127,7 +209,11 @@ export default function PickBottleScreen({ navigation, route }: any) {
       setShowReplyModal(false);
       setReplyContent('');
       setTimeout(() => {
-        navigation.goBack();
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.navigate('Sea');
+        }
       }, 1000);
     } catch (error) {
       console.error('发送回复失败:', error);
@@ -139,13 +225,30 @@ export default function PickBottleScreen({ navigation, route }: any) {
     }
   };
 
-  if (!bottle) {
+  if (isSearching) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Ionicons name="search" size={60} color="#007AFF" />
+          <Text style={styles.loadingText}>正在搜索附近的瓶子...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!currentBottle) {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>没有找到瓶子</Text>
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Sea');
+            }
+          }}
         >
           <Text style={styles.backButtonText}>返回</Text>
         </TouchableOpacity>
@@ -160,9 +263,9 @@ export default function PickBottleScreen({ navigation, route }: any) {
           <View style={styles.senderInfo}>
             <Ionicons name="person-circle" size={40} color="#007AFF" />
             <View style={styles.senderDetails}>
-              <Text style={styles.senderName}>{bottle.senderName}</Text>
+              <Text style={styles.senderName}>{currentBottle.senderName}</Text>
               <Text style={styles.sendTime}>
-                {new Date(bottle.createdAt).toLocaleDateString()} {new Date(bottle.createdAt).toLocaleTimeString()}
+                {new Date(currentBottle.createdAt).toLocaleDateString()} {new Date(currentBottle.createdAt).toLocaleTimeString()}
               </Text>
             </View>
           </View>
@@ -173,7 +276,7 @@ export default function PickBottleScreen({ navigation, route }: any) {
         </View>
 
         <View style={styles.bottleContent}>
-          <Text style={styles.contentText}>{bottle.content}</Text>
+          <Text style={styles.contentText}>{currentBottle.content}</Text>
         </View>
 
         <View style={styles.bottleFooter}>
@@ -436,6 +539,18 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 16,
     fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    fontSize: 18,
+    color: '#666',
+    marginTop: 20,
     textAlign: 'center',
   },
 });

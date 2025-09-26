@@ -76,8 +76,10 @@ export default function ThrowBottleScreen({ navigation }: any) {
       if (Platform.OS === 'web') {
         alert('瓶子已经扔到海里了！希望有人能捡到它。');
         setContent('');
-        if (navigation && navigation.goBack) {
+        if (navigation && navigation.canGoBack && navigation.canGoBack()) {
           navigation.goBack();
+        } else if (navigation && navigation.navigate) {
+          navigation.navigate('Sea');
         }
       } else {
         Alert.alert(
@@ -88,7 +90,11 @@ export default function ThrowBottleScreen({ navigation }: any) {
               text: '确定',
               onPress: () => {
                 setContent('');
-                navigation.goBack();
+                if (navigation.canGoBack()) {
+                  navigation.goBack();
+                } else {
+                  navigation.navigate('Sea');
+                }
               }
             }
           ]

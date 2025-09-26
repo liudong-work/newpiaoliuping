@@ -128,40 +128,13 @@ export default function HomeScreen({ navigation }: any) {
 
         <TouchableOpacity 
           style={[styles.button, styles.pickButton]}
-          onPress={searchNearbyBottles}
-          disabled={isLoading}
+          onPress={() => navigation.navigate('PickBottle')}
         >
           <Ionicons name="search" size={24} color="white" />
-          <Text style={styles.buttonText}>{isLoading ? '搜索中...' : '捡瓶子'}</Text>
+          <Text style={styles.buttonText}>捡瓶子</Text>
         </TouchableOpacity>
       </View>
 
-      {nearbyBottles.length > 0 && (
-        <View style={styles.bottlesContainer}>
-          <Text style={styles.sectionTitle}>附近的瓶子</Text>
-          {nearbyBottles.map((bottle) => (
-            <TouchableOpacity 
-              key={bottle._id}
-              style={styles.bottleCard}
-              onPress={() => navigation.navigate('PickBottle', { bottle })}
-            >
-              <View style={styles.bottleHeader}>
-                <Text style={styles.senderName}>{bottle.senderName}</Text>
-                <Text style={styles.time}>
-                  {new Date(bottle.createdAt).toLocaleDateString()}
-                </Text>
-              </View>
-              <Text style={styles.bottleContent} numberOfLines={3}>
-                {bottle.content}
-              </Text>
-              <View style={styles.bottleFooter}>
-                <Ionicons name="location-outline" size={16} color="#666" />
-                <Text style={styles.locationText}>附近</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
 
       {location && (
         <View style={styles.locationInfo}>
