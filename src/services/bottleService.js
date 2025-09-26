@@ -79,6 +79,30 @@ export class MessageService {
     }
   }
 
+  // 获取所有消息（用于消息列表显示）
+  static async getAllMessages() {
+    try {
+      const result = await ApiService.message.getAll();
+      console.log('获取所有消息成功:', result.messages.length, '条');
+      return result.messages;
+    } catch (error) {
+      console.error('获取所有消息失败:', error);
+      throw error;
+    }
+  }
+
+  // 获取所有瓶子（用于消息列表显示瓶子信息）
+  static async getAllBottles() {
+    try {
+      const result = await ApiService.bottle.getAll();
+      console.log('获取所有瓶子成功:', result.bottles.length, '个');
+      return result.bottles;
+    } catch (error) {
+      console.error('获取所有瓶子失败:', error);
+      throw error;
+    }
+  }
+
   // 标记消息为已读
   static async markMessageAsRead(messageId) {
     try {

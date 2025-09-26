@@ -37,30 +37,45 @@ export default function MessageScreen() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeTab, setActiveTab] = useState<'received' | 'sent'>('received');
   const [isLoading, setIsLoading] = useState(false);
+  const [bottles, setBottles] = useState<any[]>([]);
 
   useEffect(() => {
     loadMessages();
   }, []);
 
+  const getBottleInfo = (bottleId: string) => {
+    return bottles.find(bottle => bottle._id === bottleId);
+  };
+
   const loadMessages = async () => {
     setIsLoading(true);
     try {
-      // 调用后端API获取消息
-      const apiMessages = await MessageService.getUserMessages('user123'); // 临时使用固定用户ID
+      // 获取所有消息和瓶子
+      const [allMessages, allBottles] = await Promise.all([
+        MessageService.getAllMessages(),
+        BottleService.getAllBottles()
+      ]);
       
-      // 格式化消息数据
-      const formattedMessages: Message[] = apiMessages.map((msg: any) => ({
-        _id: msg._id,
-        senderId: msg.senderId,
-        receiverId: msg.receiverId,
-        content: msg.content,
-        senderName: msg.senderId === 'user123' ? '我' : '用户' + msg.senderId.slice(-4),
-        isRead: msg.isRead,
-        createdAt: msg.createdAt,
-        bottleId: msg.bottleId,
-        bottleContent: msg.bottleContent,
-        bottleSenderName: msg.bottleSenderName,
-      }));
+      setBottles(allBottles);
+      
+      // 格式化消息数据，并添加瓶子信息
+      const formattedMessages: Message[] = allMessages.map((msg: any) => {
+        // 从消息中提取瓶子信息（如果后端没有提供，我们需要从瓶子ID获取）
+        const bottleInfo = getBottleInfo(msg.bottleId);
+        
+        return {
+          _id: msg._id,
+          senderId: msg.senderId,
+          receiverId: msg.receiverId,
+          content: msg.content,
+          senderName: msg.senderId.includes('picker') ? '我' : '用户' + msg.senderId.slice(-4),
+          isRead: msg.isRead,
+          createdAt: msg.createdAt,
+          bottleId: msg.bottleId,
+          bottleContent: bottleInfo?.content || '未知瓶子内容',
+          bottleSenderName: bottleInfo?.senderName || '未知发送者',
+        };
+      });
 
       // 按瓶子ID分组，创建对话列表
       const conversationMap = new Map<string, Conversation>();

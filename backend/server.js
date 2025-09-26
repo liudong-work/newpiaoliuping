@@ -125,6 +125,22 @@ app.get('/api/users/:userId', async (req, res) => {
 });
 
 // 瓶子相关接口
+app.get('/api/bottles', async (req, res) => {
+  try {
+    let allBottles;
+    if (useMemoryStorage) {
+      allBottles = memoryBottles;
+    } else {
+      allBottles = await Bottle.find().sort({ createdAt: -1 });
+    }
+    
+    console.log(`所有瓶子数量: ${allBottles.length}`);
+    res.json({ bottles: allBottles });
+  } catch (error) {
+    res.status(500).json({ message: '服务器错误', error: error.message });
+  }
+});
+
 app.post('/api/bottles', async (req, res) => {
   try {
     const { content, senderId, senderName, location } = req.body;
@@ -220,6 +236,22 @@ app.get('/api/users/:userId/bottles', async (req, res) => {
 });
 
 // 消息相关接口
+app.get('/api/messages', async (req, res) => {
+  try {
+    let allMessages;
+    if (useMemoryStorage) {
+      allMessages = memoryMessages;
+    } else {
+      allMessages = await Message.find().sort({ createdAt: -1 });
+    }
+    
+    console.log(`所有消息数量: ${allMessages.length}`);
+    res.json({ messages: allMessages });
+  } catch (error) {
+    res.status(500).json({ message: '服务器错误', error: error.message });
+  }
+});
+
 app.get('/api/users/:userId/messages', async (req, res) => {
   try {
     const { userId } = req.params;

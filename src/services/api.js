@@ -141,6 +141,9 @@ export const ApiService = {
     // 扔瓶子
     create: (bottleData) => apiClient.post('/bottles', bottleData),
     
+    // 获取所有瓶子
+    getAll: () => apiClient.get('/bottles'),
+    
     // 获取可捡的瓶子列表
     getPickable: (latitude, longitude) => 
       apiClient.get('/bottles/pick', { latitude, longitude }),
@@ -154,6 +157,9 @@ export const ApiService = {
   message: {
     // 发送消息
     send: (messageData) => apiClient.post('/messages', messageData),
+    
+    // 获取所有消息
+    getAll: () => apiClient.get('/messages'),
     
     // 标记消息为已读
     markAsRead: (messageId) => apiClient.put(`/messages/${messageId}/read`),
