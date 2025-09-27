@@ -26,9 +26,17 @@ export default function ThrowBottleScreen({ navigation }: any) {
 
   const loadCurrentUser = async () => {
     try {
-      const userData = await AsyncStorage.getItem('user');
-      if (userData) {
-        setCurrentUser(JSON.parse(userData));
+      // Web端兼容性处理
+      if (Platform.OS === 'web') {
+        const userData = localStorage.getItem('user');
+        if (userData) {
+          setCurrentUser(JSON.parse(userData));
+        }
+      } else {
+        const userData = await AsyncStorage.getItem('user');
+        if (userData) {
+          setCurrentUser(JSON.parse(userData));
+        }
       }
     } catch (error) {
       console.error('获取当前用户失败:', error);

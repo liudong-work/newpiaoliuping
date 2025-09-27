@@ -40,12 +40,21 @@ export default function ProfileScreen({ navigation }: any) {
 
   const loadUserData = async () => {
     try {
-      // 从本地存储获取当前用户信息
-      const userData = await AsyncStorage.getItem('user');
-      if (userData) {
-        const userInfo = JSON.parse(userData);
-        setUser(userInfo);
-        setEditUsername(userInfo.username);
+      // Web端兼容性处理
+      if (Platform.OS === 'web') {
+        const userData = localStorage.getItem('user');
+        if (userData) {
+          const userInfo = JSON.parse(userData);
+          setUser(userInfo);
+          setEditUsername(userInfo.username);
+        }
+      } else {
+        const userData = await AsyncStorage.getItem('user');
+        if (userData) {
+          const userInfo = JSON.parse(userData);
+          setUser(userInfo);
+          setEditUsername(userInfo.username);
+        }
       }
     } catch (error) {
       console.error('加载用户数据失败:', error);
@@ -119,7 +128,12 @@ export default function ProfileScreen({ navigation }: any) {
           style: 'destructive',
           onPress: async () => {
             try {
-              await AsyncStorage.removeItem('user');
+              // Web端兼容性处理
+              if (Platform.OS === 'web') {
+                localStorage.removeItem('user');
+              } else {
+                await AsyncStorage.removeItem('user');
+              }
               // 导航到登录界面
               navigation.reset({
                 index: 0,

@@ -3,6 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import socketService from './src/services/socketService';
 
@@ -106,20 +107,31 @@ export default function App() {
   const handleLogin = (userData: any) => {
     setUser(userData);
     setIsLoggedIn(true);
-    AsyncStorage.setItem('user', JSON.stringify(userData));
     
-    // 暂时禁用WebSocket连接，先确保基本功能正常
-    // socketService.connect(userData._id);
+    // Web端兼容性处理
+    if (Platform.OS === 'web') {
+      localStorage.setItem('user', JSON.stringify(userData));
+    } else {
+      AsyncStorage.setItem('user', JSON.stringify(userData));
+    }
+    
+    // 启用WebSocket连接
+    socketService.connect(userData._id);
   };
 
   const handleLogout = async () => {
     try {
-      await AsyncStorage.removeItem('user');
+      // Web端兼容性处理
+      if (Platform.OS === 'web') {
+        localStorage.removeItem('user');
+      } else {
+        await AsyncStorage.removeItem('user');
+      }
       setUser(null);
       setIsLoggedIn(false);
       
-      // 暂时禁用WebSocket断开连接
-      // socketService.disconnect();
+      // 断开WebSocket连接
+      socketService.disconnect();
     } catch (error) {
       console.error('退出登录失败:', error);
     }

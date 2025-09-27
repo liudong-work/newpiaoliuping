@@ -48,27 +48,44 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     loadCurrentUser();
     loadConversationMessages();
     
-    // 暂时禁用WebSocket监听，先确保基本功能正常
-    // socketService.onNewMessage(handleNewMessage);
+    // 启用WebSocket监听
+    socketService.onNewMessage(handleNewMessage);
     
     return () => {
-      // socketService.offNewMessage(handleNewMessage);
+      socketService.offNewMessage(handleNewMessage);
     };
   }, []);
 
   const handleNewMessage = (newMessage: any) => {
     // 检查是否是当前对话的消息
     if (newMessage.bottleId === conversation.bottleId) {
-      console.log('收到新消息:', newMessage);
-      setMessages(prev => [...prev, newMessage]);
+      console.log('✅ 对话详情收到新消息:', newMessage);
+      
+      // 检查是否是当前用户相关的消息
+      if (newMessage.senderId === currentUser?._id || newMessage.receiverId === currentUser?._id) {
+        console.log('✅ 这是当前用户相关的消息，添加到消息列表');
+        setMessages(prev => [...prev, newMessage]);
+      } else {
+        console.log('❌ 这不是当前用户相关的消息，忽略');
+      }
+    } else {
+      console.log('❌ 这不是当前对话的消息，忽略');
     }
   };
 
   const loadCurrentUser = async () => {
     try {
-      const userData = await AsyncStorage.getItem('user');
-      if (userData) {
-        setCurrentUser(JSON.parse(userData));
+      // Web端兼容性处理
+      if (Platform.OS === 'web') {
+        const userData = localStorage.getItem('user');
+        if (userData) {
+          setCurrentUser(JSON.parse(userData));
+        }
+      } else {
+        const userData = await AsyncStorage.getItem('user');
+        if (userData) {
+          setCurrentUser(JSON.parse(userData));
+        }
       }
     } catch (error) {
       console.error('获取当前用户失败:', error);
@@ -132,7 +149,8 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
         currentUser._id, // 当前用户ID
         conversation.bottleSenderId, // 原瓶子发送者ID
         replyContent.trim(),
-        conversation.bottleId
+        conversation.bottleId,
+        currentUser.username // 发送者姓名
       );
 
       console.log('回复发送成功:', result);

@@ -1,4 +1,5 @@
 import ApiService, { API_CONFIG } from '../services/api';
+import socketService from './socketService';
 
 // 使用示例
 export class BottleService {
@@ -50,16 +51,28 @@ export class BottleService {
 
 export class MessageService {
   // 发送消息
-  static async sendMessage(senderId, receiverId, content, bottleId) {
+  static async sendMessage(senderId, receiverId, content, bottleId, senderName) {
     try {
       const result = await ApiService.message.send({
         senderId,
         receiverId,
         content,
         bottleId,
+        senderName, // 添加发送者姓名
       });
       
       console.log('消息发送成功:', result);
+      
+      // 发送实时推送
+      if (result.message) {
+        const pushResult = socketService.sendMessage(receiverId, result.message);
+        if (pushResult) {
+          console.log('✅ 实时推送已发送');
+        } else {
+          console.log('❌ 实时推送失败，但消息已保存');
+        }
+      }
+      
       return result;
     } catch (error) {
       console.error('发送消息失败:', error);

@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { MessageService, BottleService } from '../services/bottleService';
 import ApiService from '../services/api';
 import socketService from '../services/socketService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface Message {
   _id: string;
@@ -41,26 +42,54 @@ export default function MessageScreen({ navigation }: any) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [bottles, setBottles] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
+    loadCurrentUser();
     loadMessages();
     
-    // 暂时禁用WebSocket监听，先确保基本功能正常
-    // socketService.onNewMessage(handleNewMessage);
+    // 启用WebSocket监听
+    socketService.onNewMessage(handleNewMessage);
     
-    // 添加定时刷新，每5秒刷新一次消息列表
-    const interval = setInterval(loadMessages, 5000);
+    // 添加定时刷新，每10秒刷新一次消息列表（作为备用）
+    const interval = setInterval(loadMessages, 10000);
     
     return () => {
       clearInterval(interval);
-      // socketService.offNewMessage(handleNewMessage);
+      socketService.offNewMessage(handleNewMessage);
     };
   }, []);
 
   const handleNewMessage = (newMessage: any) => {
     console.log('消息列表收到新消息:', newMessage);
-    // 刷新消息列表
-    loadMessages();
+    
+    // 检查是否是当前用户相关的消息（发送或接收）
+    if (newMessage.senderId === currentUser?._id || newMessage.receiverId === currentUser?._id) {
+      console.log('✅ 这是当前用户相关的消息，刷新消息列表');
+      // 刷新消息列表
+      loadMessages();
+    } else {
+      console.log('❌ 这不是当前用户相关的消息，忽略');
+    }
+  };
+
+  const loadCurrentUser = async () => {
+    try {
+      // Web端兼容性处理
+      if (Platform.OS === 'web') {
+        const userData = localStorage.getItem('user');
+        if (userData) {
+          setCurrentUser(JSON.parse(userData));
+        }
+      } else {
+        const userData = await AsyncStorage.getItem('user');
+        if (userData) {
+          setCurrentUser(JSON.parse(userData));
+        }
+      }
+    } catch (error) {
+      console.error('获取当前用户失败:', error);
+    }
   };
 
   // 当页面获得焦点时刷新消息列表

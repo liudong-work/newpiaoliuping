@@ -19,12 +19,20 @@ class SocketService {
     }
 
     try {
-      const API_BASE = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : 'http://localhost:3000';
+      // 根据平台选择不同的连接地址
+      let API_BASE;
+      if (Platform.OS === 'web') {
+        API_BASE = 'http://localhost:3000';
+      } else if (Platform.OS === 'android') {
+        API_BASE = 'http://10.0.2.2:3000';
+      } else {
+        API_BASE = 'http://localhost:3000';
+      }
       
       console.log('正在连接WebSocket:', API_BASE);
       
       this.socket = io(API_BASE, {
-        transports: ['websocket', 'polling'],
+        transports: Platform.OS === 'web' ? ['polling', 'websocket'] : ['websocket', 'polling'],
         timeout: 20000,
         autoConnect: true,
         reconnection: true,

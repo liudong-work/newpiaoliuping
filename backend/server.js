@@ -285,7 +285,7 @@ app.get('/api/users/:userId/messages', async (req, res) => {
 
 app.post('/api/messages', async (req, res) => {
   try {
-    const { senderId, receiverId, content, bottleId } = req.body;
+    const { senderId, receiverId, content, bottleId, senderName } = req.body;
     
     if (useMemoryStorage) {
       const message = {
@@ -294,17 +294,32 @@ app.post('/api/messages', async (req, res) => {
         receiverId,
         content,
         bottleId,
+        senderName: senderName || '未知用户',
         isRead: false,
         createdAt: new Date().toISOString()
       };
       memoryMessages.push(message);
       console.log('新消息已发送:', message);
-      res.status(201).json({ message: '消息发送成功', messageId: message._id });
+      res.status(201).json({ 
+        message: '消息发送成功', 
+        messageId: message._id,
+        message: message // 返回完整的消息对象
+      });
     } else {
-      const message = new Message({ senderId, receiverId, content, bottleId });
+      const message = new Message({ 
+        senderId, 
+        receiverId, 
+        content, 
+        bottleId,
+        senderName: senderName || '未知用户'
+      });
       await message.save();
       console.log('新消息已发送:', message);
-      res.status(201).json({ message: '消息发送成功', messageId: message._id });
+      res.status(201).json({ 
+        message: '消息发送成功', 
+        messageId: message._id,
+        message: message // 返回完整的消息对象
+      });
     }
   } catch (error) {
     res.status(500).json({ message: '服务器错误', error: error.message });

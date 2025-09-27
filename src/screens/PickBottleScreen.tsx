@@ -46,9 +46,17 @@ export default function PickBottleScreen({ navigation, route }: any) {
 
   const loadCurrentUser = async () => {
     try {
-      const userData = await AsyncStorage.getItem('user');
-      if (userData) {
-        setCurrentUser(JSON.parse(userData));
+      // Web端兼容性处理
+      if (Platform.OS === 'web') {
+        const userData = localStorage.getItem('user');
+        if (userData) {
+          setCurrentUser(JSON.parse(userData));
+        }
+      } else {
+        const userData = await AsyncStorage.getItem('user');
+        if (userData) {
+          setCurrentUser(JSON.parse(userData));
+        }
       }
     } catch (error) {
       console.error('获取当前用户失败:', error);
@@ -188,7 +196,8 @@ export default function PickBottleScreen({ navigation, route }: any) {
         currentUser?._id || 'picker_' + Date.now(), // 当前用户ID
         currentBottle.senderId, // 原发送者ID
         replyContent.trim(),
-        currentBottle._id
+        currentBottle._id,
+        currentUser?.username || '捡瓶者' // 发送者姓名
       );
 
       console.log('消息发送成功:', result);
