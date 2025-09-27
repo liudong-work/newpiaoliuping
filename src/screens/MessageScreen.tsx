@@ -221,25 +221,12 @@ export default function MessageScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <View style={styles.bottleIcon}>
-            <Ionicons name="water" size={32} color="#4A90E2" />
-          </View>
-          <Text style={styles.title}>漂流瓶消息列表</Text>
-        </View>
-        {unreadCount > 0 && (
-          <View style={styles.badge}>
-            <Text style={styles.badgeText}>{unreadCount}</Text>
-          </View>
-        )}
-      </View>
-
-
       <ScrollView style={styles.messagesContainer}>
         {filteredConversations.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="chatbubbles-outline" size={60} color="#ccc" />
+            <View style={styles.emptyIconContainer}>
+              <Ionicons name="chatbubbles-outline" size={80} color="#E0E0E0" />
+            </View>
             <Text style={styles.emptyText}>
               还没有回复过的瓶子
             </Text>
@@ -258,27 +245,39 @@ export default function MessageScreen({ navigation }: any) {
               onPress={() => handleConversationPress(conversation)}
             >
               <View style={styles.avatarContainer}>
-                <View style={styles.avatar}>
+                <View style={[
+                  styles.avatar,
+                  conversation.unreadCount > 0 && styles.unreadAvatar
+                ]}>
                   <Text style={styles.avatarText}>
                     {conversation.lastMessage.senderId.includes('picker') ? '我' : 
                      conversation.bottleSenderName.charAt(0)}
                   </Text>
                 </View>
+                {conversation.unreadCount > 0 && (
+                  <View style={styles.unreadBadge}>
+                    <Text style={styles.unreadBadgeText}>{conversation.unreadCount}</Text>
+                  </View>
+                )}
               </View>
               
               <View style={styles.messageContent}>
-                <Text style={styles.senderName}>
-                  {conversation.lastMessage.senderId.includes('picker') ? '我' : 
-                   conversation.bottleSenderName}
-                </Text>
-                <Text style={styles.messageText} numberOfLines={2}>
+                <View style={styles.messageHeader}>
+                  <Text style={styles.senderName}>
+                    {conversation.lastMessage.senderId.includes('picker') ? '我' : 
+                     conversation.bottleSenderName}
+                  </Text>
+                  <Text style={styles.messageTime}>
+                    {formatTime(conversation.lastMessage.createdAt)}
+                  </Text>
+                </View>
+                <Text style={[
+                  styles.messageText,
+                  conversation.unreadCount > 0 && styles.unreadMessageText
+                ]} numberOfLines={2}>
                   {conversation.lastMessage.content}
                 </Text>
               </View>
-              
-              {conversation.unreadCount > 0 && (
-                <View style={styles.unreadDot} />
-              )}
             </TouchableOpacity>
           ))
         )}
@@ -290,123 +289,126 @@ export default function MessageScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#f5f5f5',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 20,
-    backgroundColor: '#ffffff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e9ecef',
+  messagesContainer: {
+    flex: 1,
+    paddingTop: 16,
   },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  bottleIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#e3f2fd',
+  emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    paddingVertical: 80,
+    paddingHorizontal: 40,
   },
-  title: {
+  emptyIconContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  emptyText: {
+    fontSize: 20,
+    color: '#666',
+    marginBottom: 8,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  emptySubtext: {
+    fontSize: 16,
+    color: '#999',
+    textAlign: 'center',
+    lineHeight: 24,
+  },
+  messageCard: {
+    backgroundColor: 'white',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 16,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  unreadMessage: {
+    backgroundColor: '#f8f9ff',
+    borderLeftWidth: 4,
+    borderLeftColor: '#007AFF',
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginRight: 16,
+  },
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#E3F2FD',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  unreadAvatar: {
+    backgroundColor: '#007AFF',
+  },
+  avatarText: {
+    color: '#007AFF',
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#2c3e50',
   },
-  badge: {
-    backgroundColor: '#FF6B6B',
+  unreadBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#FF3B30',
     borderRadius: 10,
     minWidth: 20,
     height: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 10,
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
-  badgeText: {
+  unreadBadgeText: {
     color: 'white',
     fontSize: 12,
-    fontWeight: 'bold',
-  },
-  messagesContainer: {
-    flex: 1,
-    padding: 16,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyText: {
-    fontSize: 18,
-    color: '#666',
-    marginTop: 20,
-    fontWeight: 'bold',
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    marginTop: 10,
-    lineHeight: 20,
-  },
-  messageCard: {
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  unreadMessage: {
-    borderLeftWidth: 3,
-    borderLeftColor: '#4A90E2',
-  },
-  avatarContainer: {
-    marginRight: 12,
-  },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#4A90E2',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    color: 'white',
-    fontSize: 18,
     fontWeight: 'bold',
   },
   messageContent: {
     flex: 1,
   },
+  messageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
   senderName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginBottom: 4,
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    flex: 1,
+  },
+  messageTime: {
+    fontSize: 13,
+    color: '#8E8E93',
+    marginLeft: 8,
   },
   messageText: {
-    fontSize: 14,
-    color: '#6c757d',
+    fontSize: 15,
+    color: '#8E8E93',
     lineHeight: 20,
   },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#4A90E2',
-    marginLeft: 8,
+  unreadMessageText: {
+    color: '#1a1a1a',
+    fontWeight: '500',
   },
 });
