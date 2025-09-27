@@ -10,12 +10,13 @@ import {
   Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface User {
-  id: string;
+  _id: string;
   username: string;
-  email: string;
   avatar: string;
+  createdAt: string;
 }
 
 interface Bottle {
@@ -26,12 +27,11 @@ interface Bottle {
   pickedBy?: string;
 }
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }: any) {
   const [user, setUser] = useState<User | null>(null);
   const [myBottles, setMyBottles] = useState<Bottle[]>([]);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editUsername, setEditUsername] = useState('');
-  const [editEmail, setEditEmail] = useState('');
 
   useEffect(() => {
     loadUserData();
@@ -40,23 +40,15 @@ export default function ProfileScreen() {
 
   const loadUserData = async () => {
     try {
-      // 这里应该调用后端API获取用户信息
-      // const response = await fetch('http://localhost:3000/api/users/current_user_id');
-      // const data = await response.json();
-      
-      // 模拟数据
-      const mockUser: User = {
-        id: 'current_user',
-        username: '漂流者',
-        email: 'user@example.com',
-        avatar: '',
-      };
-      
-      setUser(mockUser);
-      setEditUsername(mockUser.username);
-      setEditEmail(mockUser.email);
+      // 从本地存储获取当前用户信息
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        const userInfo = JSON.parse(userData);
+        setUser(userInfo);
+        setEditUsername(userInfo.username);
+      }
     } catch (error) {
-      console.error('加载用户信息失败:', error);
+      console.error('加载用户数据失败:', error);
     }
   };
 
@@ -101,8 +93,8 @@ export default function ProfileScreen() {
   };
 
   const handleSaveProfile = () => {
-    if (!editUsername.trim() || !editEmail.trim()) {
-      Alert.alert('提示', '用户名和邮箱不能为空');
+    if (!editUsername.trim()) {
+      Alert.alert('提示', '用户名不能为空');
       return;
     }
 
@@ -110,7 +102,6 @@ export default function ProfileScreen() {
     setUser(prev => prev ? {
       ...prev,
       username: editUsername.trim(),
-      email: editEmail.trim(),
     } : null);
     
     setShowEditModal(false);
@@ -126,9 +117,18 @@ export default function ProfileScreen() {
         { 
           text: '确定', 
           style: 'destructive',
-          onPress: () => {
-            // 这里应该清除用户登录状态
-            Alert.alert('提示', '已退出登录');
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem('user');
+              // 导航到登录界面
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Login' }],
+              });
+            } catch (error) {
+              console.error('退出登录失败:', error);
+              Alert.alert('错误', '退出登录失败');
+            }
           }
         }
       ]
@@ -158,7 +158,7 @@ export default function ProfileScreen() {
           <Ionicons name="person-circle" size={80} color="#007AFF" />
         </View>
         <Text style={styles.username}>{user.username}</Text>
-        <Text style={styles.email}>{user.email}</Text>
+        <Text style={styles.userId}>ID: {user._id}</Text>
       </View>
 
       <View style={styles.actionContainer}>
@@ -251,17 +251,6 @@ export default function ProfileScreen() {
               />
             </View>
 
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>邮箱</Text>
-              <TextInput
-                style={styles.textInput}
-                value={editEmail}
-                onChangeText={setEditEmail}
-                placeholder="请输入邮箱"
-                keyboardType="email-address"
-              />
-            </View>
-
             <View style={styles.modalButtons}>
               <TouchableOpacity 
                 style={styles.cancelButton}
@@ -308,7 +297,7 @@ const styles = StyleSheet.create({
     color: 'white',
     marginBottom: 5,
   },
-  email: {
+  userId: {
     fontSize: 16,
     color: 'rgba(255,255,255,0.8)',
   },

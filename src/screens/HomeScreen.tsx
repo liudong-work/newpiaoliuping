@@ -12,6 +12,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { BottleService } from '../services/bottleService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
@@ -32,10 +33,23 @@ export default function HomeScreen({ navigation }: any) {
   const [location, setLocation] = useState<{latitude: number, longitude: number} | null>(null);
   const [nearbyBottles, setNearbyBottles] = useState<Bottle[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
+    loadCurrentUser();
     getCurrentLocation();
   }, []);
+
+  const loadCurrentUser = async () => {
+    try {
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        setCurrentUser(JSON.parse(userData));
+      }
+    } catch (error) {
+      console.error('获取当前用户失败:', error);
+    }
+  };
 
   const getCurrentLocation = async () => {
     try {
@@ -115,6 +129,9 @@ export default function HomeScreen({ navigation }: any) {
       <View style={styles.header}>
         <Text style={styles.title}>🌊 漂流瓶海</Text>
         <Text style={styles.subtitle}>在这里寻找来自远方的消息</Text>
+        {currentUser && (
+          <Text style={styles.welcomeText}>欢迎，{currentUser.username}！</Text>
+        )}
       </View>
 
       <View style={styles.actionButtons}>
@@ -166,6 +183,12 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     color: 'rgba(255,255,255,0.8)',
+  },
+  welcomeText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 5,
+    fontWeight: '500',
   },
   actionButtons: {
     flexDirection: 'row',

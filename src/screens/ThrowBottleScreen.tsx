@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,10 +13,27 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { BottleService } from '../services/bottleService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ThrowBottleScreen({ navigation }: any) {
   const [content, setContent] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    loadCurrentUser();
+  }, []);
+
+  const loadCurrentUser = async () => {
+    try {
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        setCurrentUser(JSON.parse(userData));
+      }
+    } catch (error) {
+      console.error('获取当前用户失败:', error);
+    }
+  };
 
   const handleThrowBottle = async () => {
     if (!content.trim()) {
@@ -63,8 +80,8 @@ export default function ThrowBottleScreen({ navigation }: any) {
       // 调用后端API保存瓶子
       const result = await BottleService.throwBottle(
         content.trim(),
-        'user_' + Date.now(), // 临时使用生成的ID
-        '用户' + Math.floor(Math.random() * 1000), // 临时使用生成的姓名
+        currentUser?._id || 'user_' + Date.now(), // 当前用户ID
+        currentUser?.username || '用户' + Math.floor(Math.random() * 1000), // 当前用户名
         {
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,

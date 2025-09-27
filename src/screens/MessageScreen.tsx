@@ -8,9 +8,11 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MessageService, BottleService } from '../services/bottleService';
 import ApiService from '../services/api';
+import socketService from '../services/socketService';
 
 interface Message {
   _id: string;
@@ -29,19 +31,44 @@ interface Conversation {
   bottleId: string;
   bottleContent: string;
   bottleSenderName: string;
+  bottleSenderId: string; // 添加原瓶子发送者ID
   lastMessage: Message;
   unreadCount: number;
   totalMessages: number;
 }
 
-export default function MessageScreen() {
+export default function MessageScreen({ navigation }: any) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [bottles, setBottles] = useState<any[]>([]);
 
   useEffect(() => {
     loadMessages();
+    
+    // 暂时禁用WebSocket监听，先确保基本功能正常
+    // socketService.onNewMessage(handleNewMessage);
+    
+    // 添加定时刷新，每5秒刷新一次消息列表
+    const interval = setInterval(loadMessages, 5000);
+    
+    return () => {
+      clearInterval(interval);
+      // socketService.offNewMessage(handleNewMessage);
+    };
   }, []);
+
+  const handleNewMessage = (newMessage: any) => {
+    console.log('消息列表收到新消息:', newMessage);
+    // 刷新消息列表
+    loadMessages();
+  };
+
+  // 当页面获得焦点时刷新消息列表
+  useFocusEffect(
+    React.useCallback(() => {
+      loadMessages();
+    }, [])
+  );
 
   const getBottleInfo = (bottleId: string) => {
     return bottles.find(bottle => bottle._id === bottleId);
@@ -50,11 +77,16 @@ export default function MessageScreen() {
   const loadMessages = async () => {
     setIsLoading(true);
     try {
+      console.log('开始加载消息...');
+      
       // 获取所有消息和瓶子
       const [allMessages, allBottles] = await Promise.all([
         MessageService.getAllMessages(),
         ApiService.bottle.getAll()
       ]);
+      
+      console.log('获取到消息数量:', allMessages.length);
+      console.log('获取到瓶子数量:', allBottles.bottles.length);
       
       setBottles(allBottles.bottles);
       
@@ -68,7 +100,7 @@ export default function MessageScreen() {
           senderId: msg.senderId,
           receiverId: msg.receiverId,
           content: msg.content,
-          senderName: msg.senderId.includes('picker') ? '我' : '用户' + msg.senderId.slice(-4),
+          senderName: msg.senderId.includes('picker') ? '我' : bottleInfo?.senderName || '用户' + msg.senderId.slice(-4),
           isRead: msg.isRead,
           createdAt: msg.createdAt,
           bottleId: msg.bottleId,
@@ -77,22 +109,34 @@ export default function MessageScreen() {
         };
       });
 
-      // 按瓶子ID分组，创建对话列表
+      // 创建对话列表：显示所有相关的瓶子（扔的瓶子和有回复的瓶子）
       const conversationMap = new Map<string, Conversation>();
       
+      // 首先为所有瓶子创建对话条目（包括扔的瓶子和有回复的瓶子）
+      allBottles.bottles.forEach((bottle: any) => {
+        conversationMap.set(bottle._id, {
+          bottleId: bottle._id,
+          bottleContent: bottle.content,
+          bottleSenderName: bottle.senderName,
+          bottleSenderId: bottle.senderId,
+          lastMessage: {
+            _id: 'bottle_' + bottle._id,
+            senderId: bottle.senderId,
+            receiverId: '',
+            content: bottle.content,
+            senderName: bottle.senderName,
+            isRead: true,
+            createdAt: bottle.createdAt,
+            bottleId: bottle._id,
+          },
+          unreadCount: 0,
+          totalMessages: 0,
+        });
+      });
+      
+      // 然后更新有消息的瓶子
       formattedMessages.forEach(message => {
-        if (message.bottleId) {
-          if (!conversationMap.has(message.bottleId)) {
-            conversationMap.set(message.bottleId, {
-              bottleId: message.bottleId,
-              bottleContent: message.bottleContent || '未知瓶子内容',
-              bottleSenderName: message.bottleSenderName || '未知发送者',
-              lastMessage: message,
-              unreadCount: 0,
-              totalMessages: 0,
-            });
-          }
-          
+        if (message.bottleId && conversationMap.has(message.bottleId)) {
           const conversation = conversationMap.get(message.bottleId)!;
           conversation.totalMessages++;
           
@@ -100,46 +144,27 @@ export default function MessageScreen() {
           if (new Date(message.createdAt) > new Date(conversation.lastMessage.createdAt)) {
             conversation.lastMessage = message;
           }
-          
-          // 计算未读消息数 - 显示所有有回复的对话，不区分用户
-          // 暂时不计算未读数量，显示所有对话
         }
       });
 
       setConversations(Array.from(conversationMap.values()));
-    } catch (error) {
+      console.log('消息加载完成，对话数量:', conversationMap.size);
+    } catch (error: any) {
       console.error('加载消息失败:', error);
+      console.error('错误详情:', error?.message);
+      console.error('错误堆栈:', error?.stack);
+      
       // 如果API失败，显示空列表
       setConversations([]);
+      setBottles([]);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleConversationPress = async (conversation: Conversation) => {
-    const message = conversation.lastMessage;
-    
-    if (Platform.OS === 'web') {
-      alert(`瓶子内容:\n${conversation.bottleContent}\n\n最后消息:\n${message.content}`);
-    } else {
-      Alert.alert(
-        '对话详情',
-        `瓶子内容:\n${conversation.bottleContent}\n\n最后消息:\n${message.content}`,
-        [
-          {
-            text: '确定',
-            onPress: async () => {
-              // 标记为已读 - 暂时跳过，因为不计算未读数量
-              try {
-                await MessageService.markMessageAsRead(message._id);
-              } catch (error) {
-                console.error('标记消息已读失败:', error);
-              }
-            }
-          }
-        ]
-      );
-    }
+    // 导航到对话详情页面
+    navigation.navigate('ConversationDetail', { conversation });
   };
 
   const formatTime = (dateString: string) => {
@@ -206,13 +231,17 @@ export default function MessageScreen() {
               <View style={styles.avatarContainer}>
                 <View style={styles.avatar}>
                   <Text style={styles.avatarText}>
-                    {conversation.bottleSenderName.charAt(0)}
+                    {conversation.lastMessage.senderId.includes('picker') ? '我' : 
+                     conversation.bottleSenderName.charAt(0)}
                   </Text>
                 </View>
               </View>
               
               <View style={styles.messageContent}>
-                <Text style={styles.senderName}>{conversation.bottleSenderName}</Text>
+                <Text style={styles.senderName}>
+                  {conversation.lastMessage.senderId.includes('picker') ? '我' : 
+                   conversation.bottleSenderName}
+                </Text>
                 <Text style={styles.messageText} numberOfLines={2}>
                   {conversation.lastMessage.content}
                 </Text>

@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BottleService, MessageService } from '../services/bottleService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
 
 interface Bottle {
@@ -34,12 +35,25 @@ export default function PickBottleScreen({ navigation, route }: any) {
   const [replyContent, setReplyContent] = useState('');
   const [isPicked, setIsPicked] = useState(false);
   const [isSearching, setIsSearching] = useState(!bottle);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
+    loadCurrentUser();
     if (!bottle) {
       searchNearbyBottles();
     }
   }, []);
+
+  const loadCurrentUser = async () => {
+    try {
+      const userData = await AsyncStorage.getItem('user');
+      if (userData) {
+        setCurrentUser(JSON.parse(userData));
+      }
+    } catch (error) {
+      console.error('获取当前用户失败:', error);
+    }
+  };
 
   const searchNearbyBottles = async () => {
     setIsSearching(true);
@@ -105,7 +119,7 @@ export default function PickBottleScreen({ navigation, route }: any) {
     if (!currentBottle) return;
     try {
       // 先标记瓶子为已捡起
-      const result = await BottleService.pickBottle(currentBottle._id, 'picker_' + Date.now());
+      const result = await BottleService.pickBottle(currentBottle._id, currentUser?._id || 'picker_' + Date.now());
       setIsPicked(true);
 
       if (Platform.OS === 'web') {
@@ -171,7 +185,7 @@ export default function PickBottleScreen({ navigation, route }: any) {
     try {
       // 调用后端API发送消息
       const result = await MessageService.sendMessage(
-        'picker_' + Date.now(), // 临时使用生成的ID
+        currentUser?._id || 'picker_' + Date.now(), // 当前用户ID
         currentBottle.senderId, // 原发送者ID
         replyContent.trim(),
         currentBottle._id

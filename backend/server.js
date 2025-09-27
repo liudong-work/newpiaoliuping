@@ -1,8 +1,17 @@
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
+const http = require('http');
+const socketIo = require('socket.io');
 
 const app = express();
+const server = http.createServer(app);
+const io = socketIo(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 const PORT = process.env.PORT || 3000;
 
 // 中间件
@@ -330,6 +339,147 @@ app.put('/api/messages/:messageId/read', async (req, res) => {
   }
 });
 
+// 用户相关接口
+// 检查用户名是否存在
+app.get('/api/users/check-username/:username', (req, res) => {
+  try {
+    const { username } = req.params;
+    
+    if (useMemoryStorage) {
+      const exists = memoryUsers.some(user => user.username === username);
+      res.json({ exists });
+    } else {
+      // MongoDB查询
+      User.findOne({ username }, (err, user) => {
+        if (err) {
+          return res.status(500).json({ message: '服务器错误', error: err.message });
+        }
+        res.json({ exists: !!user });
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ message: '服务器错误', error: error.message });
+  }
+});
+
+// 创建用户
+app.post('/api/users', (req, res) => {
+  try {
+    const { username, avatar } = req.body;
+    
+    if (!username) {
+      return res.status(400).json({ message: '用户名不能为空' });
+    }
+    
+    if (useMemoryStorage) {
+      // 检查用户名是否已存在
+      const exists = memoryUsers.some(user => user.username === username);
+      if (exists) {
+        return res.status(400).json({ message: '用户名已存在' });
+      }
+      
+      const newUser = {
+        _id: 'user_' + Date.now(),
+        username,
+        avatar: avatar || username.charAt(0).toUpperCase(),
+        createdAt: new Date().toISOString(),
+      };
+      
+      memoryUsers.push(newUser);
+      console.log('新用户已创建:', newUser);
+      res.json({ message: '用户创建成功', user: newUser });
+    } else {
+      // MongoDB创建
+      const newUser = new User({
+        username,
+        avatar: avatar || username.charAt(0).toUpperCase(),
+      });
+      
+      newUser.save()
+        .then(user => {
+          console.log('新用户已创建:', user);
+          res.json({ message: '用户创建成功', user });
+        })
+        .catch(err => {
+          if (err.code === 11000) {
+            res.status(400).json({ message: '用户名已存在' });
+          } else {
+            res.status(500).json({ message: '服务器错误', error: err.message });
+          }
+        });
+    }
+  } catch (error) {
+    res.status(500).json({ message: '服务器错误', error: error.message });
+  }
+});
+
+// 获取所有用户
+app.get('/api/users', (req, res) => {
+  try {
+    if (useMemoryStorage) {
+      res.json({ users: memoryUsers });
+    } else {
+      User.find({}, (err, users) => {
+        if (err) {
+          return res.status(500).json({ message: '服务器错误', error: err.message });
+        }
+        res.json({ users });
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ message: '服务器错误', error: error.message });
+  }
+});
+
+// 获取用户信息
+app.get('/api/users/:userId', (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    if (useMemoryStorage) {
+      const user = memoryUsers.find(u => u._id === userId);
+      if (!user) {
+        return res.status(404).json({ message: '用户不存在' });
+      }
+      res.json({ user });
+    } else {
+      User.findById(userId, (err, user) => {
+        if (err) {
+          return res.status(500).json({ message: '服务器错误', error: err.message });
+        }
+        if (!user) {
+          return res.status(404).json({ message: '用户不存在' });
+        }
+        res.json({ user });
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ message: '服务器错误', error: error.message });
+  }
+});
+
+// 清空所有瓶子 (仅限内存存储)
+app.delete('/api/bottles/clear', (req, res) => {
+  if (useMemoryStorage) {
+    memoryBottles = [];
+    console.log('内存瓶子数据已清空');
+    res.json({ message: '内存瓶子数据已清空' });
+  } else {
+    res.status(400).json({ message: '仅在内存存储模式下支持清空数据' });
+  }
+});
+
+// 清空所有消息 (仅限内存存储)
+app.delete('/api/messages/clear', (req, res) => {
+  if (useMemoryStorage) {
+    memoryMessages = [];
+    console.log('内存消息数据已清空');
+    res.json({ message: '内存消息数据已清空' });
+  } else {
+    res.status(400).json({ message: '仅在内存存储模式下支持清空数据' });
+  }
+});
+
 // 错误处理中间件
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -341,8 +491,52 @@ app.use('*', (req, res) => {
   res.status(404).json({ message: '接口不存在' });
 });
 
-app.listen(PORT, () => {
+// WebSocket连接处理
+const connectedUsers = new Map(); // 存储用户ID和socket的映射
+
+io.on('connection', (socket) => {
+  console.log('用户连接:', socket.id);
+
+  // 用户登录时绑定用户ID
+  socket.on('user-login', (userId) => {
+    connectedUsers.set(userId, socket);
+    socket.userId = userId;
+    console.log(`用户 ${userId} 已连接，当前在线用户数: ${connectedUsers.size}`);
+  });
+
+  // 用户断开连接
+  socket.on('disconnect', () => {
+    if (socket.userId) {
+      connectedUsers.delete(socket.userId);
+      console.log(`用户 ${socket.userId} 已断开连接，当前在线用户数: ${connectedUsers.size}`);
+    }
+  });
+
+  // 发送消息时实时推送
+  socket.on('send-message', (messageData) => {
+    const { receiverId, message } = messageData;
+    
+    console.log(`收到推送请求: 发送给用户 ${receiverId}`);
+    
+    // 如果接收者在线，实时推送消息
+    const receiverSocket = connectedUsers.get(receiverId);
+    if (receiverSocket) {
+      receiverSocket.emit('new-message', message);
+      console.log(`✅ 实时推送消息给用户 ${receiverId} 成功`);
+    } else {
+      console.log(`❌ 用户 ${receiverId} 不在线，无法推送`);
+    }
+  });
+
+  // 心跳检测
+  socket.on('ping', () => {
+    socket.emit('pong');
+  });
+});
+
+server.listen(PORT, () => {
   console.log(`服务器运行在端口 ${PORT}`);
   console.log(`访问 http://localhost:${PORT} 测试服务器`);
+  console.log(`WebSocket服务已启动`);
   console.log(`MongoDB连接: ${MONGODB_URI}`);
 });

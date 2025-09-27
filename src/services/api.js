@@ -123,11 +123,17 @@ export const apiClient = new ApiClient();
 export const ApiService = {
   // 用户相关API
   user: {
-    // 注册用户
-    register: (userData) => apiClient.post('/users/register', userData),
+    // 检查用户名是否存在
+    checkUsername: (username) => apiClient.get(`/users/check-username/${username}`),
+    
+    // 创建用户
+    create: (userData) => apiClient.post('/users', userData),
     
     // 获取用户信息
     getUser: (userId) => apiClient.get(`/users/${userId}`),
+    
+    // 获取所有用户
+    getAll: () => apiClient.get('/users'),
     
     // 获取用户消息
     getMessages: (userId) => apiClient.get(`/users/${userId}/messages`),
