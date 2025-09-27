@@ -243,9 +243,31 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
                   isMyMessage ? styles.myMessage : styles.otherMessage
                 ]}
               >
-                <View style={styles.messageContent}>
-                  <Text style={styles.messageText}>{message.content}</Text>
-                  <Text style={styles.messageTime}>{formatTime(message.createdAt)}</Text>
+                {/* 头像 */}
+                <View style={styles.avatarContainer}>
+                  <View style={[
+                    styles.avatar,
+                    isMyMessage ? styles.myAvatar : styles.otherAvatar
+                  ]}>
+                    <Text style={styles.avatarText}>
+                      {isMyMessage ? '我' : (message.senderName ? message.senderName.charAt(0) : '?')}
+                    </Text>
+                  </View>
+                </View>
+                
+                {/* 消息内容 */}
+                <View style={[
+                  styles.messageContent,
+                  isMyMessage ? styles.myMessageContent : styles.otherMessageContent
+                ]}>
+                  <Text style={[
+                    styles.messageText,
+                    isMyMessage ? styles.myMessageText : styles.otherMessageText
+                  ]}>{message.content}</Text>
+                  <Text style={[
+                    styles.messageTime,
+                    isMyMessage ? styles.myMessageTime : styles.otherMessageTime
+                  ]}>{formatTime(message.createdAt)}</Text>
                 </View>
               </View>
             );
@@ -330,35 +352,77 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   messageItem: {
-    marginBottom: 12,
-    maxWidth: '80%',
+    marginBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
   },
   myMessage: {
-    alignSelf: 'flex-end',
+    flexDirection: 'row-reverse',
   },
   otherMessage: {
-    alignSelf: 'flex-start',
+    flexDirection: 'row',
+  },
+  avatarContainer: {
+    marginHorizontal: 8,
+  },
+  avatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#ffffff',
+  },
+  myAvatar: {
+    backgroundColor: '#007AFF',
+  },
+  otherAvatar: {
+    backgroundColor: '#E3F2FD',
+  },
+  avatarText: {
+    color: '#007AFF',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   messageContent: {
-    backgroundColor: 'white',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 12,
+    maxWidth: '70%',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
   },
+  myMessageContent: {
+    backgroundColor: '#007AFF',
+    borderBottomRightRadius: 4,
+  },
+  otherMessageContent: {
+    backgroundColor: 'white',
+    borderBottomLeftRadius: 4,
+  },
   messageText: {
     fontSize: 14,
-    color: '#333',
     lineHeight: 20,
+  },
+  myMessageText: {
+    color: 'white',
+  },
+  otherMessageText: {
+    color: '#333',
   },
   messageTime: {
     fontSize: 12,
-    color: '#999',
     marginTop: 4,
     textAlign: 'right',
+  },
+  myMessageTime: {
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  otherMessageTime: {
+    color: '#999',
   },
   replyContainer: {
     flexDirection: 'row',
