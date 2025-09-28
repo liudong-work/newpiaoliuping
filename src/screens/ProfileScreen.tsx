@@ -131,9 +131,14 @@ export default function ProfileScreen({ navigation, onLogout }: any) {
           style: 'destructive',
           onPress: async () => {
             try {
+              console.log('开始退出登录...');
               // 调用父组件的退出登录方法
               if (onLogout) {
+                console.log('调用onLogout方法');
                 await onLogout();
+                console.log('onLogout方法执行完成');
+              } else {
+                console.log('onLogout方法不存在');
               }
             } catch (error) {
               console.error('退出登录失败:', error);

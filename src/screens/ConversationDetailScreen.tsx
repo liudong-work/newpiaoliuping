@@ -254,6 +254,8 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
         console.log('通话已结束');
         setIsInCall(false);
         setCallData(null);
+        // 重置通话服务状态
+        voiceCallService.resetCallState();
         break;
     }
   };
@@ -288,6 +290,8 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     }
     setIsInCall(false);
     setCallData(null);
+    // 重置通话服务状态
+    voiceCallService.resetCallState();
   };
 
   // 接听通话

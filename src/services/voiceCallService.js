@@ -11,6 +11,7 @@ class VoiceCallService {
   initiateCall(receiverId, receiverName) {
     if (this.isInCall) {
       console.log('当前正在通话中，无法发起新通话');
+      console.log('当前通话状态:', this.currentCall);
       return false;
     }
 
@@ -118,6 +119,13 @@ class VoiceCallService {
     
     this.currentCall = null;
     return true;
+  }
+
+  // 重置通话状态
+  resetCallState() {
+    console.log('重置通话状态');
+    this.isInCall = false;
+    this.currentCall = null;
   }
 
   // 处理收到的通话请求

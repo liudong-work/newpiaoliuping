@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>语音通话系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .call-container {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            max-width: 400px;
+            width: 100%;
+            text-align: center;
+        }
+
+        .title {
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .status {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background: #4caf50;
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 60px;
+            height: 60px;
+            font-size: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            background: #45a049;
+            transform: scale(1.05);
+        }
+
+        .btn.danger {
+            background: #f44336;
+        }
+
+        .btn.danger:hover {
+            background: #d32f2f;
+        }
+
+        .btn.secondary {
+            background: #6b7280;
+        }
+
+        .btn.secondary:hover {
+            background: #4b5563;
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .timer {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .logs {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            text-align: left;
+            margin-top: 20px;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+        }
+
+        .log-entry.error {
+            color: #f87171;
+        }
+
+        .log-entry.success {
+            color: #34d399;
+        }
+
+        .log-entry.warning {
+            color: #fbbf24;
+        }
+
+        .log-entry.info {
+            color: #60a5fa;
+        }
+
+        .room-info {
+            background: #f3f4f6;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .room-id {
+            font-family: monospace;
+            background: #e5e7eb;
+            padding: 5px 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .user-list {
+            text-align: left;
+            margin-top: 10px;
+        }
+
+        .user-item {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px 0;
+            border-left: 4px solid #4caf50;
+        }
+    </style>
+</head>
+<body>
+    <div class="call-container">
+        <h1 class="title">🎤 语音通话系统</h1>
+        
+        <div id="status" class="status">
+            正在初始化...
+        </div>
+
+        <div id="roomInfo" class="room-info" style="display: none;">
+            <h3>房间信息</h3>
+            <div class="room-id" id="roomId">房间ID: 加载中...</div>
+            <div class="user-list" id="userList"></div>
+        </div>
+
+        <div id="timer" class="timer" style="display: none;">
+            00:00
+        </div>
+
+        <div class="controls">
+            <button id="startBtn" class="btn" onclick="startCall()">
+                📞
+            </button>
+            <button id="muteBtn" class="btn secondary" onclick="toggleMute()" disabled>
+                🎤
+            </button>
+            <button id="hangupBtn" class="btn danger" onclick="hangup()" disabled>
+                📵
+            </button>
+        </div>
+
+        <div id="logs" class="logs">
+            <div class="log-entry info">[系统] 语音通话系统已启动</div>
+        </div>
+    </div>
+
+    <script>
+        // 全局变量
+        let localStream = null;
+        let peerConnection = null;
+        let userId = null;
+        let roomId = 'test_room_' + Math.random().toString(36).substr(2, 9);
+        let isConnected = false;
+        let isMuted = false;
+        let callStartTime = null;
+        let pollInterval = null;
+
+        // DOM 元素
+        const statusEl = document.getElementById('status');
+        const roomInfoEl = document.getElementById('roomInfo');
+        const roomIdEl = document.getElementById('roomId');
+        const userListEl = document.getElementById('userList');
+        const timerEl = document.getElementById('timer');
+        const startBtn = document.getElementById('startBtn');
+        const muteBtn = document.getElementById('muteBtn');
+        const hangupBtn = document.getElementById('hangupBtn');
+        const logsEl = document.getElementById('logs');
+
+        // 日志函数
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logsEl.appendChild(logEntry);
+            logsEl.scrollTop = logsEl.scrollHeight;
+            console.log(`[${timestamp}] ${message}`);
+        }
+
+        // 更新状态
+        function updateStatus(message, type = 'info') {
+            statusEl.textContent = message;
+            statusEl.className = `status ${type}`;
+        }
+
+        // 加入房间
+        async function joinRoom() {
+            try {
+                addLog('正在加入房间...', 'info');
+                updateStatus('正在加入房间...', 'info');
+
+                const response = await fetch('/api/join_room', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        roomId: roomId,
+                        userName: '用户' + Math.floor(Math.random() * 1000),
+                        userAvatar: '🎤'
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('加入房间失败');
+                }
+
+                const data = await response.json();
+                userId = data.user_id;
+                roomId = data.room_id;
+
+                addLog(`成功加入房间: ${roomId}`, 'success');
+                addLog(`用户ID: ${userId}`, 'info');
+                updateStatus('已加入房间，等待其他用户...', 'success');
+
+                // 显示房间信息
+                roomIdEl.textContent = `房间ID: ${roomId}`;
+                roomInfoEl.style.display = 'block';
+
+                // 开始轮询消息
+                startPolling();
+
+            } catch (error) {
+                addLog(`加入房间失败: ${error.message}`, 'error');
+                updateStatus(`加入房间失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 开始轮询
+        function startPolling() {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+            }
+
+            pollInterval = setInterval(async () => {
+                if (!userId) return;
+
+                try {
+                    const response = await fetch(`/api/poll?user_id=${userId}`);
+                    if (!response.ok) return;
+
+                    const data = await response.json();
+                    const messages = data.messages || [];
+
+                    for (const message of messages) {
+                        await handleMessage(message);
+                    }
+                } catch (error) {
+                    addLog(`轮询消息失败: ${error.message}`, 'error');
+                }
+            }, 1000);
+        }
+
+        // 处理消息
+        async function handleMessage(message) {
+            const { type, data } = message;
+
+            switch (type) {
+                case 'room_info':
+                    addLog('收到房间信息', 'info');
+                    updateUserList(data.users);
+                    if (data.users.length > 0) {
+                        addLog(`找到 ${data.users.length} 个用户`, 'success');
+                        // 开始WebRTC连接
+                        await startWebRTCConnection();
+                        // 创建并发送offer
+                        await createAndSendOffer();
+                    } else {
+                        updateStatus('等待其他用户加入...', 'warning');
+                    }
+                    break;
+
+                case 'user_joined':
+                    addLog(`用户 ${data.user_data.userName} 加入`, 'success');
+                    // 开始WebRTC连接
+                    await startWebRTCConnection();
+                    // 创建并发送offer
+                    await createAndSendOffer();
+                    break;
+
+                case 'offer':
+                    addLog('收到offer', 'info');
+                    await handleOffer(data.data, data.from);
+                    break;
+
+                case 'answer':
+                    addLog('收到answer', 'info');
+                    await handleAnswer(data.data, data.from);
+                    break;
+
+                case 'ice_candidate':
+                    addLog('收到ICE candidate', 'info');
+                    await handleIceCandidate(data.data, data.from);
+                    break;
+
+                case 'user_left':
+                    addLog(`用户 ${data.user_data.userName} 离开`, 'warning');
+                    break;
+            }
+        }
+
+        // 更新用户列表
+        function updateUserList(users) {
+            userListEl.innerHTML = '';
+            users.forEach(user => {
+                const userItem = document.createElement('div');
+                userItem.className = 'user-item';
+                userItem.innerHTML = `
+                    <strong>${user.user_data.userName}</strong>
+                    <br>
+                    <small>ID: ${user.user_id}</small>
+                `;
+                userListEl.appendChild(userItem);
+            });
+        }
+
+        // 发送信令
+        async function sendSignal(type, data) {
+            if (!userId) return;
+
+            try {
+                await fetch('/api/signal', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        type: type,
+                        data: data
+                    })
+                });
+            } catch (error) {
+                addLog(`发送信令失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 开始WebRTC连接
+        async function startWebRTCConnection() {
+            try {
+                addLog('正在建立WebRTC连接...', 'info');
+                updateStatus('正在建立WebRTC连接...', 'info');
+
+                // 如果已经有连接，先关闭
+                if (peerConnection) {
+                    peerConnection.close();
+                    peerConnection = null;
+                }
+
+                // 创建RTCPeerConnection
+                const configuration = {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                };
+
+                peerConnection = new RTCPeerConnection(configuration);
+
+                // 添加本地流
+                if (localStream) {
+                    localStream.getTracks().forEach(track => {
+                        peerConnection.addTrack(track, localStream);
+                    });
+                }
+
+                // 处理远程流
+                peerConnection.ontrack = (event) => {
+                    addLog('收到远程音频流', 'success');
+                    const remoteStream = event.streams[0];
+                    
+                    // 创建音频元素播放远程音频
+                    const audio = new Audio();
+                    audio.srcObject = remoteStream;
+                    audio.autoplay = true;
+                    audio.volume = 1.0;
+                    audio.muted = false;
+                    audio.setAttribute('playsinline', 'true');
+                    audio.setAttribute('webkit-playsinline', 'true');
+                    
+                    audio.addEventListener('canplay', () => {
+                        audio.play().then(() => {
+                            addLog('远程音频播放成功', 'success');
+                            updateStatus('WebRTC连接成功！', 'success');
+                            isConnected = true;
+                            startTimer();
+                            updateButtons();
+                        }).catch(error => {
+                            addLog(`自动播放失败: ${error.message}`, 'warning');
+                            updateStatus('WebRTC连接成功！请点击页面激活音频', 'warning');
+                        });
+                    });
+                };
+
+                // 处理ICE候选
+                peerConnection.onicecandidate = (event) => {
+                    if (event.candidate) {
+                        addLog('发送ICE candidate', 'info');
+                        sendSignal('ice_candidate', event.candidate);
+                    }
+                };
+
+                // 监听连接状态变化
+                peerConnection.onconnectionstatechange = () => {
+                    addLog(`连接状态: ${peerConnection.connectionState}`, 'info');
+                    if (peerConnection.connectionState === 'connected') {
+                        updateStatus('WebRTC连接成功！', 'success');
+                        isConnected = true;
+                        startTimer();
+                        updateButtons();
+                    } else if (peerConnection.connectionState === 'disconnected') {
+                        updateStatus('WebRTC连接断开', 'error');
+                        isConnected = false;
+                        updateButtons();
+                    }
+                };
+
+                addLog('WebRTC连接配置完成', 'success');
+
+            } catch (error) {
+                addLog(`WebRTC连接失败: ${error.message}`, 'error');
+                updateStatus(`WebRTC连接失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 创建并发送offer
+        async function createAndSendOffer() {
+            try {
+                if (!peerConnection) {
+                    addLog('WebRTC连接不存在', 'error');
+                    return;
+                }
+
+                const currentState = peerConnection.signalingState;
+                if (currentState !== 'stable') {
+                    addLog(`信令状态不正确，无法创建offer: ${currentState}`, 'warning');
+                    return;
+                }
+
+                addLog('创建offer...', 'info');
+                const offer = await peerConnection.createOffer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: false
+                });
+
+                await peerConnection.setLocalDescription(offer);
+                addLog('本地offer设置成功', 'success');
+
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                addLog('发送offer...', 'info');
+                sendSignal('offer', offer);
+                addLog('offer已发送', 'success');
+
+            } catch (error) {
+                addLog(`创建offer失败: ${error.message}`, 'error');
+                updateStatus(`连接失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 处理offer
+        async function handleOffer(offer, from) {
+            try {
+                addLog('收到offer，开始处理...', 'info');
+
+                if (!peerConnection) {
+                    addLog('创建新的WebRTC连接...', 'info');
+                    await startWebRTCConnection();
+                }
+
+                const currentState = peerConnection.signalingState;
+                if (currentState === 'stable') {
+                    await peerConnection.setRemoteDescription(offer);
+                    addLog('远程offer设置成功', 'success');
+
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    addLog('本地answer设置成功', 'success');
+
+                    sendSignal('answer', answer);
+                    addLog('answer已发送', 'success');
+                } else {
+                    addLog(`信令状态不正确，无法处理offer: ${currentState}`, 'warning');
+                }
+            } catch (error) {
+                addLog(`处理offer失败: ${error.message}`, 'error');
+                updateStatus(`连接失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 处理answer
+        async function handleAnswer(answer, from) {
+            try {
+                if (peerConnection) {
+                    const currentState = peerConnection.signalingState;
+                    if (currentState === 'have-local-offer') {
+                        await peerConnection.setRemoteDescription(answer);
+                        addLog('远程answer设置成功', 'success');
+                    } else {
+                        addLog(`信令状态不正确，无法设置远程answer: ${currentState}`, 'warning');
+                    }
+                }
+            } catch (error) {
+                addLog(`处理answer失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 处理ICE candidate
+        async function handleIceCandidate(candidate, from) {
+            try {
+                if (peerConnection && peerConnection.remoteDescription) {
+                    await peerConnection.addIceCandidate(candidate);
+                    addLog('ICE candidate添加成功', 'success');
+                } else {
+                    addLog('无法添加ICE candidate: 连接不存在或远程description未设置', 'warning');
+                }
+            } catch (error) {
+                addLog(`处理ICE candidate失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 开始通话
+        async function startCall() {
+            try {
+                addLog('开始语音通话...', 'info');
+                updateStatus('正在请求麦克风权限...', 'info');
+
+                // 请求麦克风权限
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                addLog('麦克风权限获取成功', 'success');
+                updateStatus('麦克风权限已获得', 'success');
+
+                // 加入房间
+                await joinRoom();
+
+                // 更新按钮状态
+                startBtn.disabled = true;
+                startBtn.textContent = '📞';
+                muteBtn.disabled = false;
+                hangupBtn.disabled = false;
+
+            } catch (error) {
+                addLog(`语音通话失败: ${error.message}`, 'error');
+                updateStatus(`语音通话失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 切换静音
+        function toggleMute() {
+            if (localStream) {
+                const audioTracks = localStream.getAudioTracks();
+                audioTracks.forEach(track => {
+                    track.enabled = isMuted;
+                });
+            }
+
+            isMuted = !isMuted;
+            muteBtn.textContent = isMuted ? '🔇' : '🎤';
+            addLog(isMuted ? '麦克风已静音' : '麦克风已开启', 'info');
+        }
+
+        // 挂断
+        function hangup() {
+            addLog('结束通话', 'info');
+
+            // 停止本地流
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+
+            // 关闭WebRTC连接
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+
+            // 停止轮询
+            if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+            }
+
+            // 重置状态
+            isConnected = false;
+            isMuted = false;
+            callStartTime = null;
+            userId = null;
+
+            // 更新UI
+            updateStatus('通话已结束', 'info');
+            updateButtons();
+            timerEl.style.display = 'none';
+            roomInfoEl.style.display = 'none';
+        }
+
+        // 更新按钮状态
+        function updateButtons() {
+            if (isConnected) {
+                startBtn.disabled = true;
+                startBtn.textContent = '📞';
+                muteBtn.disabled = false;
+                hangupBtn.disabled = false;
+            } else {
+                startBtn.disabled = false;
+                startBtn.textContent = '📞';
+                muteBtn.disabled = true;
+                hangupBtn.disabled = true;
+            }
+        }
+
+        // 开始计时
+        function startTimer() {
+            callStartTime = Date.now();
+            timerEl.style.display = 'block';
+
+            const timerInterval = setInterval(() => {
+                if (!callStartTime) {
+                    clearInterval(timerInterval);
+                    return;
+                }
+
+                const elapsed = Math.floor((Date.now() - callStartTime) / 1000);
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = elapsed % 60;
+                timerEl.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        // 页面加载完成后初始化
+        window.addEventListener('load', () => {
+            addLog('页面加载完成', 'info');
+            updateStatus('点击开始按钮开始语音通话', 'info');
+        });
+    </script>
+</body>
+</html>

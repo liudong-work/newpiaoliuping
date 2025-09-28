@@ -126,17 +126,26 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
+      console.log('App.tsx handleLogout 开始执行');
+      
       // Web端兼容性处理
       if (Platform.OS === 'web') {
+        console.log('Web端清除用户数据');
         localStorage.removeItem('user');
       } else {
+        console.log('移动端清除用户数据');
         await AsyncStorage.removeItem('user');
       }
+      
+      console.log('设置用户状态为null');
       setUser(null);
       setIsLoggedIn(false);
       
+      console.log('断开WebSocket连接');
       // 断开WebSocket连接
       socketService.disconnect();
+      
+      console.log('退出登录完成');
     } catch (error) {
       console.error('退出登录失败:', error);
     }
