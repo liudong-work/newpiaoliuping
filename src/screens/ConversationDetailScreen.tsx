@@ -14,6 +14,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { MessageService } from '../services/bottleService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import socketService from '../services/socketService';
+import voiceCallService from '../services/voiceCallService';
+import VoiceCallScreen from '../components/VoiceCallScreen';
 
 interface Message {
   _id: string;
@@ -43,6 +45,8 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isInCall, setIsInCall] = useState(false);
+  const [callData, setCallData] = useState<any>(null);
 
   useEffect(() => {
     loadCurrentUser();
@@ -51,8 +55,12 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     // 启用WebSocket监听
     socketService.onNewMessage(handleNewMessage);
     
+    // 设置通话监听
+    voiceCallService.addCallListener(handleCallEvent);
+    
     return () => {
       socketService.offNewMessage(handleNewMessage);
+      voiceCallService.removeCallListener(handleCallEvent);
     };
   }, []);
 
@@ -221,6 +229,65 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     }
   };
 
+  // 处理通话事件
+  const handleCallEvent = (event: string, data: any) => {
+    console.log('收到通话事件:', event, data);
+    
+    switch (event) {
+      case 'incoming-call':
+        setCallData(data);
+        setIsInCall(true);
+        break;
+      case 'call-answered':
+        console.log('通话已接听');
+        break;
+      case 'call-rejected':
+        console.log('通话被拒绝');
+        setIsInCall(false);
+        setCallData(null);
+        break;
+      case 'call-ended':
+        console.log('通话已结束');
+        setIsInCall(false);
+        setCallData(null);
+        break;
+    }
+  };
+
+  // 发起语音通话
+  const handleStartCall = () => {
+    if (!currentUser) {
+      Alert.alert('错误', '用户信息未加载');
+      return;
+    }
+
+    const receiverId = conversation.bottleSenderId;
+    const receiverName = conversation.bottleSenderName;
+    
+    const success = voiceCallService.initiateCall(receiverId, receiverName);
+    if (success) {
+      console.log('发起语音通话');
+    } else {
+      Alert.alert('错误', '无法发起通话，请稍后重试');
+    }
+  };
+
+  // 结束通话
+  const handleEndCall = () => {
+    if (callData) {
+      voiceCallService.endCall(callData.callId);
+    }
+    setIsInCall(false);
+    setCallData(null);
+  };
+
+  // 接听通话
+  const handleAnswerCall = () => {
+    if (callData) {
+      voiceCallService.answerCall(callData.callId);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView 
@@ -293,6 +360,12 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
 
       {/* 回复输入框 */}
       <View style={styles.replyContainer}>
+        <TouchableOpacity
+          style={styles.callButton}
+          onPress={handleStartCall}
+        >
+          <Ionicons name="call" size={24} color="#4ECDC4" />
+        </TouchableOpacity>
         <TextInput
           style={styles.replyInput}
           placeholder="输入回复..."
@@ -313,6 +386,17 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
           />
         </TouchableOpacity>
       </View>
+
+      {/* 语音通话界面 */}
+      {isInCall && callData && (
+        <VoiceCallScreen
+          callerName={callData.receiverName || '未知用户'}
+          callerId={callData.receiverId}
+          isIncoming={callData.status === 'initiating'}
+          onEndCall={handleEndCall}
+          onAnswerCall={handleAnswerCall}
+        />
+      )}
     </View>
   );
 }
@@ -454,6 +538,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#e9ecef',
+  },
+  callButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
   replyInput: {
     flex: 1,

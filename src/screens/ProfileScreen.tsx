@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import SimpleVoiceTest from '../components/SimpleVoiceTest';
 
 interface User {
   _id: string;
@@ -33,6 +34,7 @@ export default function ProfileScreen({ navigation }: any) {
   const [myBottles, setMyBottles] = useState<Bottle[]>([]);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editUsername, setEditUsername] = useState('');
+  const [showVoiceTest, setShowVoiceTest] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -207,6 +209,17 @@ export default function ProfileScreen({ navigation }: any) {
         </View>
       </View>
 
+      {/* 语音测试按钮 */}
+      <View style={styles.testContainer}>
+        <TouchableOpacity
+          style={styles.testButton}
+          onPress={() => setShowVoiceTest(true)}
+        >
+          <Ionicons name="mic" size={20} color="#4ECDC4" />
+          <Text style={styles.testButtonText}>语音通话测试</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.bottlesContainer}>
         <Text style={styles.sectionTitle}>我的瓶子</Text>
         {myBottles.length === 0 ? (
@@ -280,6 +293,29 @@ export default function ProfileScreen({ navigation }: any) {
                 <Text style={styles.saveButtonText}>保存</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 语音测试模态框 */}
+      <Modal
+        visible={showVoiceTest}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowVoiceTest(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.voiceTestModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>语音通话测试</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowVoiceTest(false)}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <SimpleVoiceTest />
           </View>
         </View>
       </Modal>
@@ -506,5 +542,51 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  testContainer: {
+    padding: 20,
+  },
+  testButton: {
+    backgroundColor: 'white',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  testButtonText: {
+    color: '#4ECDC4',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  voiceTestModal: {
+    flex: 1,
+    backgroundColor: 'white',
+    marginTop: 50,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  closeButton: {
+    padding: 5,
   },
 });
