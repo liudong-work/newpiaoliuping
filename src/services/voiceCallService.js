@@ -28,6 +28,7 @@ class VoiceCallService {
 
     // 通过WebSocket发送通话请求
     if (socketService.socket && socketService.isConnected) {
+      console.log('发送语音通话请求到后端:', callData);
       socketService.socket.emit('voice-call-initiate', callData);
     } else {
       console.warn('WebSocket未连接，无法发送通话请求');

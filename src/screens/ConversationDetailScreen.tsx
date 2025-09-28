@@ -268,9 +268,14 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     const receiverId = conversation.bottleSenderId;
     const receiverName = conversation.bottleSenderName;
     
+    console.log('准备发起语音通话:');
+    console.log('发起者ID:', currentUser._id);
+    console.log('接收者ID:', receiverId);
+    console.log('接收者姓名:', receiverName);
+    
     const success = voiceCallService.initiateCall(receiverId, receiverName);
     if (success) {
-      console.log('发起语音通话');
+      console.log('发起语音通话成功');
     } else {
       Alert.alert('错误', '无法发起通话，请稍后重试');
     }
@@ -295,8 +300,17 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
   // 处理来电
   const handleIncomingCall = (incomingCallData: any) => {
     console.log('收到来电:', incomingCallData);
-    setCallData(incomingCallData);
-    setIsInCall(true);
+    console.log('当前用户ID:', currentUser?._id);
+    console.log('来电接收者ID:', incomingCallData.receiverId);
+    
+    // 检查是否是当前用户应该接收的通话
+    if (currentUser && currentUser._id === incomingCallData.receiverId) {
+      console.log('✅ 这是给当前用户的来电，显示接听弹窗');
+      setCallData(incomingCallData);
+      setIsInCall(true);
+    } else {
+      console.log('❌ 这不是给当前用户的来电，忽略');
+    }
   };
 
   return (
