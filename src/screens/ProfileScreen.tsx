@@ -29,7 +29,7 @@ interface Bottle {
   pickedBy?: string;
 }
 
-export default function ProfileScreen({ navigation }: any) {
+export default function ProfileScreen({ navigation, onLogout }: any) {
   const [user, setUser] = useState<User | null>(null);
   const [myBottles, setMyBottles] = useState<Bottle[]>([]);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -131,17 +131,10 @@ export default function ProfileScreen({ navigation }: any) {
           style: 'destructive',
           onPress: async () => {
             try {
-              // Web端兼容性处理
-              if (Platform.OS === 'web') {
-                localStorage.removeItem('user');
-              } else {
-                await AsyncStorage.removeItem('user');
+              // 调用父组件的退出登录方法
+              if (onLogout) {
+                await onLogout();
               }
-              // 导航到登录界面
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }],
-              });
             } catch (error) {
               console.error('退出登录失败:', error);
               Alert.alert('错误', '退出登录失败');

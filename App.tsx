@@ -85,7 +85,12 @@ function MainNavigator({ user, onLogout }: { user: any; onLogout: () => Promise<
     >
       <Tab.Screen name="Sea" component={SeaStack} options={{ title: '海' }} />
       <Tab.Screen name="Message" component={MessageStack} options={{ title: '消息' }} />
-      <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: '我的' }} />
+      <Tab.Screen 
+        name="Profile" 
+        options={{ title: '我的' }}
+      >
+        {(props) => <ProfileScreen {...props} onLogout={onLogout} />}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 }
