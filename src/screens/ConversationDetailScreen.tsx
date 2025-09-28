@@ -56,15 +56,48 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     };
   }, []);
 
+  // 当currentUser加载完成后，重新设置WebSocket监听
+  useEffect(() => {
+    if (currentUser) {
+      console.log('🔔 当前用户已加载，重新设置WebSocket监听:', currentUser._id);
+      console.log('🔔 当前对话bottleId:', conversation.bottleId);
+      socketService.offNewMessage(handleNewMessage);
+      socketService.onNewMessage(handleNewMessage);
+    }
+  }, [currentUser]);
+
   const handleNewMessage = (newMessage: any) => {
+    console.log('🔔 对话详情收到新消息:', newMessage);
+    console.log('🔔 当前对话bottleId:', conversation.bottleId);
+    console.log('🔔 当前用户ID:', currentUser?._id);
+    console.log('🔔 消息bottleId:', newMessage.bottleId);
+    console.log('🔔 消息senderId:', newMessage.senderId);
+    console.log('🔔 消息receiverId:', newMessage.receiverId);
+    
+    // 如果没有currentUser，直接返回
+    if (!currentUser) {
+      console.log('❌ 当前用户未加载，忽略消息');
+      return;
+    }
+    
     // 检查是否是当前对话的消息
     if (newMessage.bottleId === conversation.bottleId) {
-      console.log('✅ 对话详情收到新消息:', newMessage);
+      console.log('✅ 这是当前对话的消息');
       
       // 检查是否是当前用户相关的消息
-      if (newMessage.senderId === currentUser?._id || newMessage.receiverId === currentUser?._id) {
-        console.log('✅ 这是当前用户相关的消息，添加到消息列表');
-        setMessages(prev => [...prev, newMessage]);
+      if (newMessage.senderId === currentUser._id || newMessage.receiverId === currentUser._id) {
+        console.log('✅ 这是当前用户相关的消息，检查是否已存在');
+        
+        // 检查消息是否已经存在，避免重复添加
+        setMessages(prev => {
+          const exists = prev.some(msg => msg._id === newMessage._id);
+          if (exists) {
+            console.log('❌ 消息已存在，跳过添加');
+            return prev;
+          }
+          console.log('✅ 添加新消息到列表');
+          return [...prev, newMessage];
+        });
       } else {
         console.log('❌ 这不是当前用户相关的消息，忽略');
       }
@@ -109,7 +142,7 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
         senderId: msg.senderId,
         receiverId: msg.receiverId,
         content: msg.content,
-        senderName: msg.senderId.includes('picker') ? '我' : conversation.bottleSenderName,
+        senderName: msg.senderName || '未知用户',
         isRead: msg.isRead,
         createdAt: msg.createdAt,
         bottleId: msg.bottleId,
@@ -155,31 +188,10 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
 
       console.log('回复发送成功:', result);
 
-      // 暂时禁用实时推送，先确保基本功能正常
-      // const pushSuccess = socketService.sendMessage(conversation.bottleSenderId, {
-      //   ...result,
-      //   bottleId: conversation.bottleId,
-      //   senderId: currentUser._id,
-      //   receiverId: conversation.bottleSenderId,
-      //   content: replyContent.trim(),
-      //   createdAt: new Date().toISOString(),
-      // });
-
-      // if (!pushSuccess) {
-      //   console.warn('实时推送发送失败，但消息已保存');
-      // }
-
-      if (Platform.OS === 'web') {
-        alert('回复已发送！');
-      } else {
-        Alert.alert('成功', '回复已发送！');
-      }
-
       // 清空输入框
       setReplyContent('');
       
-      // 重新加载消息
-      await loadConversationMessages();
+      // 不在这里添加消息，等待WebSocket推送
       
     } catch (error) {
       console.error('发送回复失败:', error);
@@ -210,11 +222,13 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
   };
 
   return (
-    <KeyboardAvoidingView 
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView style={styles.messagesContainer}>
+    <View style={styles.container}>
+      <ScrollView 
+        style={styles.messagesContainer}
+        contentContainerStyle={styles.messagesContent}
+        showsVerticalScrollIndicator={true}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* 瓶子信息 */}
         <View style={styles.bottleInfo}>
           <View style={styles.bottleHeader}>
@@ -231,18 +245,19 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
             <Text style={styles.loadingText}>加载中...</Text>
           </View>
         ) : (
-          messages.map((message) => {
-            // 判断消息是否来自当前用户
-            const isMyMessage = currentUser && message.senderId === currentUser._id;
-            
-            return (
-              <View
-                key={message._id}
-                style={[
-                  styles.messageItem,
-                  isMyMessage ? styles.myMessage : styles.otherMessage
-                ]}
-              >
+          <View style={styles.messagesList}>
+            {messages.map((message) => {
+              // 判断消息是否来自当前用户
+              const isMyMessage = currentUser && message.senderId === currentUser._id;
+              
+              return (
+                <View
+                  key={message._id}
+                  style={[
+                    styles.messageItem,
+                    isMyMessage ? styles.myMessage : styles.otherMessage
+                  ]}
+                >
                 {/* 头像 */}
                 <View style={styles.avatarContainer}>
                   <View style={[
@@ -271,7 +286,8 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
                 </View>
               </View>
             );
-          })
+            })}
+          </View>
         )}
       </ScrollView>
 
@@ -297,7 +313,7 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
           />
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -308,7 +324,14 @@ const styles = StyleSheet.create({
   },
   messagesContainer: {
     flex: 1,
+    backgroundColor: 'transparent',
+  },
+  messagesContent: {
     padding: 16,
+    paddingBottom: 20,
+  },
+  messagesList: {
+    flex: 1,
   },
   bottleInfo: {
     backgroundColor: 'white',

@@ -123,11 +123,24 @@ class SocketService {
     }
 
     try {
+      // 同时向接收者和发送者推送消息
       this.socket.emit('send-message', {
         receiverId,
         message
       });
+      
+      // 如果是自发送消息，也向发送者推送
+      if (message.senderId !== receiverId) {
+        this.socket.emit('send-message', {
+          receiverId: message.senderId,
+          message
+        });
+      }
+      
       console.log('实时推送已发送给用户:', receiverId);
+      if (message.senderId !== receiverId) {
+        console.log('实时推送已发送给发送者:', message.senderId);
+      }
       return true;
     } catch (error) {
       console.error('发送实时推送失败:', error);

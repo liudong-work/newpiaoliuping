@@ -495,6 +495,30 @@ app.delete('/api/messages/clear', (req, res) => {
   }
 });
 
+// 清空所有用户数据 (仅限内存存储)
+app.delete('/api/users/clear', (req, res) => {
+  if (useMemoryStorage) {
+    memoryUsers = [];
+    console.log('内存用户数据已清空');
+    res.json({ message: '内存用户数据已清空' });
+  } else {
+    res.status(400).json({ message: '仅在内存存储模式下支持清空数据' });
+  }
+});
+
+// 清空所有数据 (仅限内存存储)
+app.delete('/api/clear-all-data', (req, res) => {
+  if (useMemoryStorage) {
+    memoryBottles = [];
+    memoryMessages = [];
+    memoryUsers = [];
+    console.log('所有内存数据已清空');
+    res.json({ message: '所有内存数据已清空' });
+  } else {
+    res.status(400).json({ message: '仅在内存存储模式下支持清空数据' });
+  }
+});
+
 // 错误处理中间件
 app.use((err, req, res, next) => {
   console.error(err.stack);

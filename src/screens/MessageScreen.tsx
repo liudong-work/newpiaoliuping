@@ -138,32 +138,42 @@ export default function MessageScreen({ navigation }: any) {
         };
       });
 
-      // 创建对话列表：显示所有相关的瓶子（扔的瓶子和有回复的瓶子）
+      // 创建对话列表：只显示有回复消息的瓶子
       const conversationMap = new Map<string, Conversation>();
       
-      // 首先为所有瓶子创建对话条目（包括扔的瓶子和有回复的瓶子）
-      allBottles.bottles.forEach((bottle: any) => {
-        conversationMap.set(bottle._id, {
-          bottleId: bottle._id,
-          bottleContent: bottle.content,
-          bottleSenderName: bottle.senderName,
-          bottleSenderId: bottle.senderId,
-          lastMessage: {
-            _id: 'bottle_' + bottle._id,
-            senderId: bottle.senderId,
-            receiverId: '',
-            content: bottle.content,
-            senderName: bottle.senderName,
-            isRead: true,
-            createdAt: bottle.createdAt,
-            bottleId: bottle._id,
-          },
-          unreadCount: 0,
-          totalMessages: 0,
-        });
+      // 先收集有消息的瓶子ID
+      const bottlesWithMessages = new Set<string>();
+      formattedMessages.forEach(message => {
+        if (message.bottleId) {
+          bottlesWithMessages.add(message.bottleId);
+        }
       });
       
-      // 然后更新有消息的瓶子
+      // 只为有消息的瓶子创建对话条目
+      allBottles.bottles.forEach((bottle: any) => {
+        if (bottlesWithMessages.has(bottle._id)) {
+          conversationMap.set(bottle._id, {
+            bottleId: bottle._id,
+            bottleContent: bottle.content,
+            bottleSenderName: bottle.senderName,
+            bottleSenderId: bottle.senderId,
+            lastMessage: {
+              _id: 'bottle_' + bottle._id,
+              senderId: bottle.senderId,
+              receiverId: '',
+              content: bottle.content,
+              senderName: bottle.senderName,
+              isRead: true,
+              createdAt: bottle.createdAt,
+              bottleId: bottle._id,
+            },
+            unreadCount: 0,
+            totalMessages: 0,
+          });
+        }
+      });
+      
+      // 更新有消息的瓶子
       formattedMessages.forEach(message => {
         if (message.bottleId && conversationMap.has(message.bottleId)) {
           const conversation = conversationMap.get(message.bottleId)!;
