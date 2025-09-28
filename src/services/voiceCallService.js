@@ -1,4 +1,4 @@
-import socketService from './socketService';
+import { socketService } from './socketService';
 
 class VoiceCallService {
   constructor() {
