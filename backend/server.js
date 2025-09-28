@@ -567,6 +567,47 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 语音通话事件处理
+  socket.on('voice-call-initiate', (callData) => {
+    console.log('收到语音通话请求:', callData);
+    const { receiverId } = callData;
+    
+    // 转发给接收者
+    const receiverSocket = connectedUsers.get(receiverId);
+    if (receiverSocket) {
+      receiverSocket.emit('voice-call-incoming', callData);
+      console.log(`✅ 语音通话请求已发送给用户 ${receiverId}`);
+    } else {
+      console.log(`❌ 用户 ${receiverId} 不在线，无法发送通话请求`);
+    }
+  });
+
+  socket.on('voice-call-answer', (answerData) => {
+    console.log('收到语音通话接听:', answerData);
+    const { callId } = answerData;
+    
+    // 这里需要根据callId找到发起者，简化处理
+    // 实际应用中应该维护通话状态
+    socket.broadcast.emit('voice-call-answered', answerData);
+    console.log('✅ 语音通话接听通知已广播');
+  });
+
+  socket.on('voice-call-reject', (rejectData) => {
+    console.log('收到语音通话拒绝:', rejectData);
+    const { callId } = rejectData;
+    
+    socket.broadcast.emit('voice-call-rejected', rejectData);
+    console.log('✅ 语音通话拒绝通知已广播');
+  });
+
+  socket.on('voice-call-end', (endData) => {
+    console.log('收到语音通话结束:', endData);
+    const { callId } = endData;
+    
+    socket.broadcast.emit('voice-call-ended', endData);
+    console.log('✅ 语音通话结束通知已广播');
+  });
+
   // 心跳检测
   socket.on('ping', () => {
     socket.emit('pong');

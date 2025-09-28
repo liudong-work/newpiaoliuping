@@ -108,10 +108,60 @@ class SocketService {
     }
   }
 
+  // 监听语音通话事件
+  onVoiceCallIncoming(callback) {
+    if (this.socket) {
+      this.socket.on('voice-call-incoming', callback);
+    }
+  }
+
+  onVoiceCallAnswered(callback) {
+    if (this.socket) {
+      this.socket.on('voice-call-answered', callback);
+    }
+  }
+
+  onVoiceCallRejected(callback) {
+    if (this.socket) {
+      this.socket.on('voice-call-rejected', callback);
+    }
+  }
+
+  onVoiceCallEnded(callback) {
+    if (this.socket) {
+      this.socket.on('voice-call-ended', callback);
+    }
+  }
+
   // 移除新消息监听
   offNewMessage(callback) {
     if (this.socket) {
       this.socket.off('new-message', callback);
+    }
+  }
+
+  // 移除语音通话监听
+  offVoiceCallIncoming(callback) {
+    if (this.socket) {
+      this.socket.off('voice-call-incoming', callback);
+    }
+  }
+
+  offVoiceCallAnswered(callback) {
+    if (this.socket) {
+      this.socket.off('voice-call-answered', callback);
+    }
+  }
+
+  offVoiceCallRejected(callback) {
+    if (this.socket) {
+      this.socket.off('voice-call-rejected', callback);
+    }
+  }
+
+  offVoiceCallEnded(callback) {
+    if (this.socket) {
+      this.socket.off('voice-call-ended', callback);
     }
   }
 

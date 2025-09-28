@@ -58,9 +58,13 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     // 设置通话监听
     voiceCallService.addCallListener(handleCallEvent);
     
+    // 设置语音通话WebSocket监听
+    socketService.onVoiceCallIncoming(handleIncomingCall);
+    
     return () => {
       socketService.offNewMessage(handleNewMessage);
       voiceCallService.removeCallListener(handleCallEvent);
+      socketService.offVoiceCallIncoming(handleIncomingCall);
     };
   }, []);
 
@@ -286,6 +290,13 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     if (callData) {
       voiceCallService.answerCall(callData.callId);
     }
+  };
+
+  // 处理来电
+  const handleIncomingCall = (incomingCallData: any) => {
+    console.log('收到来电:', incomingCallData);
+    setCallData(incomingCallData);
+    setIsInCall(true);
   };
 
   return (
