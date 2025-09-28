@@ -303,8 +303,18 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     console.log('当前用户ID:', currentUser?._id);
     console.log('来电接收者ID:', incomingCallData.receiverId);
     
+    // 如果当前用户未加载，等待用户加载完成
+    if (!currentUser) {
+      console.log('⏳ 当前用户未加载，等待用户加载完成...');
+      // 延迟重试
+      setTimeout(() => {
+        handleIncomingCall(incomingCallData);
+      }, 1000);
+      return;
+    }
+    
     // 检查是否是当前用户应该接收的通话
-    if (currentUser && currentUser._id === incomingCallData.receiverId) {
+    if (currentUser._id === incomingCallData.receiverId) {
       console.log('✅ 这是给当前用户的来电，显示接听弹窗');
       setCallData(incomingCallData);
       setIsInCall(true);
