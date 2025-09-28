@@ -27,7 +27,11 @@ class VoiceCallService {
     this.isInCall = true;
 
     // 通过WebSocket发送通话请求
-    socketService.emit('voice-call-initiate', callData);
+    if (socketService.socket && socketService.isConnected) {
+      socketService.socket.emit('voice-call-initiate', callData);
+    } else {
+      console.warn('WebSocket未连接，无法发送通话请求');
+    }
     
     console.log('发起语音通话:', callData);
     this.notifyListeners('call-initiated', callData);
@@ -46,10 +50,14 @@ class VoiceCallService {
     this.isInCall = true;
 
     // 通知对方已接听
-    socketService.emit('voice-call-answer', {
-      callId,
-      status: 'answered'
-    });
+    if (socketService.socket && socketService.isConnected) {
+      socketService.socket.emit('voice-call-answer', {
+        callId,
+        status: 'answered'
+      });
+    } else {
+      console.warn('WebSocket未连接，无法发送接听通知');
+    }
 
     console.log('接听通话:', callId);
     this.notifyListeners('call-answered', this.currentCall);
@@ -68,10 +76,14 @@ class VoiceCallService {
     this.isInCall = false;
 
     // 通知对方已拒绝
-    socketService.emit('voice-call-reject', {
-      callId,
-      status: 'rejected'
-    });
+    if (socketService.socket && socketService.isConnected) {
+      socketService.socket.emit('voice-call-reject', {
+        callId,
+        status: 'rejected'
+      });
+    } else {
+      console.warn('WebSocket未连接，无法发送拒绝通知');
+    }
 
     console.log('拒绝通话:', callId);
     this.notifyListeners('call-rejected', this.currentCall);
@@ -91,10 +103,14 @@ class VoiceCallService {
     this.isInCall = false;
 
     // 通知对方通话已结束
-    socketService.emit('voice-call-end', {
-      callId,
-      status: 'ended'
-    });
+    if (socketService.socket && socketService.isConnected) {
+      socketService.socket.emit('voice-call-end', {
+        callId,
+        status: 'ended'
+      });
+    } else {
+      console.warn('WebSocket未连接，无法发送结束通知');
+    }
 
     console.log('结束通话:', callId);
     this.notifyListeners('call-ended', this.currentCall);
