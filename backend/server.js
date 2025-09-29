@@ -555,15 +555,21 @@ io.on('connection', (socket) => {
   socket.on('send-message', (messageData) => {
     const { receiverId, message } = messageData;
     
-    console.log(`收到推送请求: 发送给用户 ${receiverId}`);
+    console.log(`📡 收到推送请求: 发送给用户 ${receiverId}`);
+    console.log('📡 消息详情:', message);
+    console.log('📡 当前在线用户:', Array.from(connectedUsers.keys()));
+    console.log('📡 发送者Socket ID:', socket.id);
     
     // 如果接收者在线，实时推送消息
     const receiverSocket = connectedUsers.get(receiverId);
     if (receiverSocket) {
+      console.log('📡 找到接收者Socket，准备发送消息');
       receiverSocket.emit('new-message', message);
       console.log(`✅ 实时推送消息给用户 ${receiverId} 成功`);
+      console.log('📡 接收者Socket ID:', receiverSocket.id);
     } else {
       console.log(`❌ 用户 ${receiverId} 不在线，无法推送`);
+      console.log('📊 在线用户列表:', connectedUsers.keys());
     }
   });
 

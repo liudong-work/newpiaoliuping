@@ -78,18 +78,26 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     }
   }, [currentUser]);
 
-  const handleNewMessage = (newMessage: any) => {
+  const handleNewMessage = (newMessage: any, _retryCount = 0) => {
     console.log('🔔 对话详情收到新消息:', newMessage);
     console.log('🔔 当前对话bottleId:', conversation.bottleId);
     console.log('🔔 当前用户ID:', currentUser?._id);
     console.log('🔔 消息bottleId:', newMessage.bottleId);
-    console.log('🔔 消息senderId:', newMessage.senderId);
+    console.log('🔔 消息sentId:', newMessage.senderId);
     console.log('🔔 消息receiverId:', newMessage.receiverId);
     
-    // 如果没有currentUser，直接返回
+    // 如果没有currentUser，添加重试机制
     if (!currentUser) {
-      console.log('❌ 当前用户未加载，忽略消息');
-      return;
+      if (_retryCount < 5) {
+        console.log(`⏳ 当前用户未加载,${_retryCount + 1}秒后重试`);
+        setTimeout(() => {
+          handleNewMessage(newMessage, _retryCount + 1);
+        }, 1000);
+        return;
+      } else {
+        console.log('❌ 重试次数超限，放弃处理消息');
+        return;
+      }
     }
     
     // 检查是否是当前对话的消息
@@ -97,6 +105,17 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
       console.log('✅ 这是当前对话的消息');
       
       // 检查是否是当前用户相关的消息
+      console.log('🔍 用户ID对比检查:');
+      console.log('- 当前用户ID:', currentUser?._id);
+      console.log('- 当前用户类型:', typeof currentUser?._id);
+      console.log('- 消息发送者ID:', newMessage.senderId);
+      console.log('- 消息发送者类型:', typeof newMessage.senderId);
+      console.log('- 消息接收者ID:', newMessage.receiverId);
+      console.log('- 消息接收者类型:', typeof newMessage.receiverId);
+      console.log('- senderId匹配:', newMessage.senderId === currentUser?._id);
+      console.log('- receiverId匹配:', newMessage.receiverId === currentUser?._id);
+      console.log('- senderId === receiverId:', newMessage.senderId === newMessage.receiverId);
+      
       if (newMessage.senderId === currentUser._id || newMessage.receiverId === currentUser._id) {
         console.log('✅ 这是当前用户相关的消息，检查是否已存在');
         
@@ -189,10 +208,22 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
 
     setIsSending(true);
     try {
-      // 发送回复消息：使用当前用户ID
+      // 确定接收者ID - 应该是对话中的对方
+      const receiverId = currentUser._id === conversation.bottleSenderId 
+        ? messages[0]?.senderId || conversation.bottleSenderId // A发给B
+        : conversation.bottleSenderId; // B发给A
+        
+      console.log('📤 发送消息详情:');
+      console.log('- 发送者ID:', currentUser._id);
+      console.log('- 发送者姓名:', currentUser.username);
+      console.log('- 原瓶子发送者ID:', conversation.bottleSenderId);
+      console.log('- 计算出的接收者ID:', receiverId);
+      console.log('- 瓶子ID:', conversation.bottleId);
+      console.log('- 消息内容:', replyContent.trim());
+      
       const result = await MessageService.sendMessage(
         currentUser._id, // 当前用户ID
-        conversation.bottleSenderId, // 原瓶子发送者ID
+        receiverId, // 正确的接收者ID
         replyContent.trim(),
         conversation.bottleId,
         currentUser.username // 发送者姓名

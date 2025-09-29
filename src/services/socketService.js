@@ -22,11 +22,11 @@ class SocketService {
       // 根据平台选择不同的连接地址
       let API_BASE;
       if (Platform.OS === 'web') {
-        API_BASE = 'http://localhost:3000';
+        API_BASE = 'http://192.168.1.6:3000';  // Web浏览器（手机和电脑）
       } else if (Platform.OS === 'android') {
-        API_BASE = 'http://10.0.2.2:3000';
+        API_BASE = 'http://192.168.1.6:3000';  // 真机使用电脑IP
       } else {
-        API_BASE = 'http://localhost:3000';
+        API_BASE = 'http://192.168.1.6:3000';  // iOS真机使用电脑IP
       }
       
       console.log('正在连接WebSocket:', API_BASE);
@@ -167,12 +167,22 @@ class SocketService {
 
   // 发送消息（触发实时推送）
   sendMessage(receiverId, message) {
+    console.log('📡 SocketService.sendMessage 开始');
+    console.log('📡 接收者ID:', receiverId);
+    console.log('📡 消息数据:', message);
+    console.log('📡 WebSocket存在:', !!this.socket);
+    console.log('📡 WebSocket连接状态:', this.isConnected);
+    console.log('📡 Socket ID:', this.socket?.id);
+    
     if (!this.socket || !this.isConnected) {
-      console.warn('WebSocket未连接，无法发送实时推送');
+      console.warn('❌ WebSocket未连接，无法发送实时推送');
+      console.warn('❌ Socket状态:', this.socket ? '存在' : '不存在');
+      console.warn('❌ 连接状态:', this.isConnected);
       return false;
     }
 
     try {
+      console.log('📡 发送消息到接收者:', receiverId);
       // 同时向接收者和发送者推送消息
       this.socket.emit('send-message', {
         receiverId,
@@ -181,19 +191,20 @@ class SocketService {
       
       // 如果是自发送消息，也向发送者推送
       if (message.senderId !== receiverId) {
+        console.log('📡 发送消息到发送者:', message.senderId);
         this.socket.emit('send-message', {
           receiverId: message.senderId,
           message
         });
       }
       
-      console.log('实时推送已发送给用户:', receiverId);
+      console.log('✅ 实时推送已发送给用户:', receiverId);
       if (message.senderId !== receiverId) {
-        console.log('实时推送已发送给发送者:', message.senderId);
+        console.log('✅ 实时推送已发送给发送者:', message.senderId);
       }
       return true;
     } catch (error) {
-      console.error('发送实时推送失败:', error);
+      console.error('❌ 发送实时推送失败:', error);
       return false;
     }
   }

@@ -3,16 +3,23 @@ import { Platform } from 'react-native';
 // API基础配置
 const API_CONFIG = {
   // 根据平台设置不同的API地址
-  BASE_URL: Platform.OS === 'android' 
-    ? 'http://10.0.2.2:3000'  // Android模拟器
-    : 'http://localhost:3000', // iOS模拟器和Web
+  BASE_URL: Platform.OS === 'web' 
+    ? 'http://192.168.1.6:3000'  // Web浏览器（手机和电脑）
+    : 'http://192.168.1.6:3000', // 真机测试使用电脑IP
   
-  // 如果用真机测试，需要改成你的电脑IP地址
-  // BASE_URL: 'http://192.168.1.100:3000',
+  // Android模拟器使用: http://10.0.2.2:3000
+  // iOS模拟器使用: http://localhost:3000
+  // 真机使用: http://192.168.1.6:3000
   
   TIMEOUT: 10000, // 请求超时时间（毫秒）
   VERSION: 'v1',  // API版本
 };
+
+// 强制日志，确保配置被正确读取
+console.log('🔧 API配置加载:');
+console.log('- Platform.OS:', Platform.OS);
+console.log('- API_CONFIG.BASE_URL:', API_CONFIG.BASE_URL);
+console.log('- API配置已更新为电脑IP 192.168.1.6');
 
 // 完整的API地址
 const API_BASE = `${API_CONFIG.BASE_URL}/api`;
