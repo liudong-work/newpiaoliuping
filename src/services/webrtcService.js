@@ -1,4 +1,28 @@
-import { RTCPeerConnection, RTCView, mediaDevices } from 'react-native-webrtc';
+// 动态导入WebRTC模块，处理Expo Go不支持的情况
+let RTCPeerConnection, RTCView, mediaDevices;
+
+try {
+  const webrtc = require('react-native-webrtc');
+  RTCPeerConnection = webrtc.RTCPeerConnection;
+  RTCView = webrtc.RTCView;
+  mediaDevices = webrtc.mediaDevices;
+  console.log('✅ WebRTC模块导入成功');
+} catch (error) {
+  console.warn('⚠️ react-native-webrtc不可用，使用模拟模式:', error.message);
+  // 创建模拟对象
+  RTCPeerConnection = class MockRTCPeerConnection {
+    constructor(config) {
+      console.log('📱 模拟PeerConnection创建:', config);
+    }
+  };
+  RTCView = () => {};
+  mediaDevices = {
+    getUserMedia: async () => {
+      console.log('📱 模拟getUserMedia调用');
+      return { getAudioTracks: () => [] };
+    }
+  };
+}
 
 class WebRTCService {
   constructor() {

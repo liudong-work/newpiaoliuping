@@ -1,17 +1,46 @@
 import { socketService } from './socketService';
 
+// 检查WebRTC支持情况
+let webrtcSupported = false;
+try {
+  require('react-native-webrtc');
+  webrtcSupported = true;
+  console.log('✅ react-native-webrtc可用');
+} catch (error) {
+  console.warn('⚠️ react-native-webrtc不可用，语音通话将工作在模拟模式');
+  webrtcSupported = false;
+}
+
 class VoiceCallService {
   constructor() {
     this.isInCall = false;
     this.currentCall = null;
     this.callListeners = [];
+    console.log('🎉 VoiceCallService 初始化完成');
   }
 
   // 发起语音通话
   initiateCall(receiverId, receiverName) {
+    console.log('🚀 VoiceCallService.initiateCall 开始');
+    console.log('📊 当前状态检查:');
+    console.log('- this.isInCall:', this.isInCall);
+    console.log('- this.currentCall:', this.currentCall);
+    console.log('- socketService.socket存在:', !!socketService.socket);
+    console.log('- socketService.isConnected:', socketService.isConnected);
+    console.log('- receiverId:', receiverId);
+    console.log('- receiverName:', receiverName);
+    
     if (this.isInCall) {
-      console.log('当前正在通话中，无法发起新通话');
+      console.log('❌ 当前正在通话中，无法发起新通话');
       console.log('当前通话状态:', this.currentCall);
+      return false;
+    }
+
+    // WebSocket连接检查
+    if (!socketService.socket || !socketService.isConnected) {
+      console.warn('❌ WebSocket未连接，无法发送通话请求');
+      console.log('socketService.socket:', !!socketService.socket);
+      console.log('socketService.isConnected:', socketService.isConnected);
       return false;
     }
 
@@ -21,21 +50,19 @@ class VoiceCallService {
       receiverId,
       receiverName,
       timestamp: Date.now(),
-      status: 'initiating'
+      status: 'initiating',
+      webrtcSupported: webrtcSupported
     };
 
     this.currentCall = callData;
     this.isInCall = true;
 
     // 通过WebSocket发送通话请求
-    if (socketService.socket && socketService.isConnected) {
-      console.log('发送语音通话请求到后端:', callData);
-      socketService.socket.emit('voice-call-initiate', callData);
-    } else {
-      console.warn('WebSocket未连接，无法发送通话请求');
-    }
+    console.log('📡 发送语音通话请求到后端:', callData);
+    socketService.socket.emit('voice-call-initiate', callData);
     
-    console.log('发起语音通话:', callData);
+    console.log('✅ 发起语音通话成功:', callData);
+    console.log('📱 WebRTC支持状态:', webrtcSupported ? '完整功能' : '模拟模式');
     this.notifyListeners('call-initiated', callData);
     
     return true;
@@ -123,9 +150,18 @@ class VoiceCallService {
 
   // 重置通话状态
   resetCallState() {
-    console.log('重置通话状态');
+    console.log('🔄 重置通话状态...');
+    console.log('重置前状态:');
+    console.log('- isInCall:', this.isInCall);
+    console.log('- currentCall:', this.currentCall);
+    
     this.isInCall = false;
     this.currentCall = null;
+    
+    console.log('重置后状态:');
+    console.log('- isInCall:', this.isInCall);
+    console.log('- currentCall:', this.currentCall);
+    console.log('✅ 通话状态已重置');
   }
 
   // 处理收到的通话请求

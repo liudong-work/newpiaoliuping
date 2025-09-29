@@ -61,29 +61,22 @@ export default function HomeScreen({ navigation }: any) {
 
   const getCurrentLocation = async () => {
     try {
-      // 在web环境中使用模拟位置
-      if (Platform.OS === 'web') {
-        setLocation({
-          latitude: 39.9042 + (Math.random() - 0.5) * 0.01,
-          longitude: 116.4074 + (Math.random() - 0.5) * 0.01,
-        });
-        return;
-      }
-
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('权限被拒绝', '需要位置权限来使用漂流瓶功能');
-        return;
-      }
-
-      const location = await Location.getCurrentPositionAsync({});
+      console.log('🚀 跳过位置权限检查，直接使用测试位置');
+      
+      // 所有平台都直接使用模拟位置，无需权限
       setLocation({
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
+        latitude: 39.9042 + (Math.random() - 0.5) * 0.01,  // 北京附近的随机位置
+        longitude: 116.4074 + (Math.random() - 0.5) * 0.01,
       });
+      
+      console.log('✅ 测试位置已设置:', {
+        latitude: 39.9042 + (Math.random() - 0.5) * 0.01,
+        longitude: 116.4074 + (Math.random() - 0.5) * 0.01,
+      });
+      
     } catch (error) {
-      console.error('获取位置失败:', error);
-      // 如果获取位置失败，使用默认位置
+      console.error('设置位置失败:', error);
+      // 即使出错也设置一个默认位置
       setLocation({
         latitude: 39.9042,
         longitude: 116.4074,

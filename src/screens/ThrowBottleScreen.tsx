@@ -65,25 +65,15 @@ export default function ThrowBottleScreen({ navigation }: any) {
     setIsLoading(true);
 
     try {
-      // 获取当前位置
-      let location;
-      if (Platform.OS === 'web') {
-        // 在web环境中使用模拟位置
-        location = {
-          coords: {
-            latitude: 39.9042 + (Math.random() - 0.5) * 0.01,
-            longitude: 116.4074 + (Math.random() - 0.5) * 0.01,
-          }
-        };
-      } else {
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          Alert.alert('权限被拒绝', '需要位置权限来扔瓶子');
-          setIsLoading(false);
-          return;
+      console.log('🚀 跳过位置权限检查，直接使用测试位置扔瓶子');
+      
+      // 所有平台都直接使用模拟位置，无需权限检查
+      const location = {
+        coords: {
+          latitude: 39.9042 + (Math.random() - 0.5) * 0.01,  // 北京附近的随机位置
+          longitude: 116.4074 + (Math.random() - 0.5) * 0.01,
         }
-        location = await Location.getCurrentPositionAsync({});
-      }
+      };
 
       // 调用后端API保存瓶子
       const result = await BottleService.throwBottle(

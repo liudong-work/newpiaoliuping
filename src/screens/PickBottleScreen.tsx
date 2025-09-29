@@ -66,30 +66,13 @@ export default function PickBottleScreen({ navigation, route }: any) {
   const searchNearbyBottles = async () => {
     setIsSearching(true);
     try {
-      let location;
-      if (Platform.OS === 'web') {
-        // Web平台使用模拟位置
-        location = {
-          latitude: 39.9042,
-          longitude: 116.4074,
-        };
-      } else {
-        // 获取当前位置
-        const { status } = await Location.requestForegroundPermissionsAsync();
-        if (status !== 'granted') {
-          if (Platform.OS === 'web') {
-            alert('需要位置权限来搜索附近的瓶子');
-          } else {
-            Alert.alert('权限错误', '需要位置权限来搜索附近的瓶子');
-          }
-          return;
-        }
-        const locationData = await Location.getCurrentPositionAsync({});
-        location = {
-          latitude: locationData.coords.latitude,
-          longitude: locationData.coords.longitude,
-        };
-      }
+      console.log('🚀 跳过位置权限检查，直接使用测试位置捡瓶子');
+      
+      // 所有平台都直接使用模拟位置，无需权限检查
+      const location = {
+        latitude: 39.9042 + (Math.random() - 0.5) * 0.01,  // 北京附近的随机位置
+        longitude: 116.4074 + (Math.random() - 0.5) * 0.01,
+      };
 
       const bottles = await BottleService.searchNearbyBottles(location.latitude, location.longitude);
       
