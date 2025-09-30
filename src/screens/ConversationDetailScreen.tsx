@@ -9,6 +9,7 @@ import {
   Alert,
   Platform,
   KeyboardAvoidingView,
+  Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MessageService } from '../services/bottleService';
@@ -47,6 +48,8 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isInCall, setIsInCall] = useState(false);
   const [callData, setCallData] = useState<any>(null);
+  const [showCallModal, setShowCallModal] = useState(false);
+  const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'connected' | 'ended'>('idle');
 
   useEffect(() => {
     loadCurrentUser();
@@ -75,8 +78,21 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
       console.log('🔔 当前对话bottleId:', conversation.bottleId);
       socketService.offNewMessage(handleNewMessage);
       socketService.onNewMessage(handleNewMessage);
+    } else {
+      console.log('⏳ 当前用户未加载，等待用户数据...');
     }
   }, [currentUser]);
+
+  // 确保在组件挂载时也设置监听器
+  useEffect(() => {
+    console.log('🔔 组件挂载，设置WebSocket监听器');
+    socketService.onNewMessage(handleNewMessage);
+    
+    return () => {
+      console.log('🔔 组件卸载，移除WebSocket监听器');
+      socketService.offNewMessage(handleNewMessage);
+    };
+  }, []);
 
   const handleNewMessage = (newMessage: any, _retryCount = 0) => {
     console.log('🔔 对话详情收到新消息:', newMessage);
@@ -116,7 +132,7 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
       console.log('- receiverId匹配:', newMessage.receiverId === currentUser?._id);
       console.log('- senderId === receiverId:', newMessage.senderId === newMessage.receiverId);
       
-      if (newMessage.senderId === currentUser._id || newMessage.receiverId === currentUser._id) {
+      if (newMessage.senderId === currentUser?._id || newMessage.receiverId === currentUser?._id) {
         console.log('✅ 这是当前用户相关的消息，检查是否已存在');
         
         // 检查消息是否已经存在，避免重复添加
@@ -209,24 +225,24 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     setIsSending(true);
     try {
       // 确定接收者ID - 应该是对话中的对方
-      const receiverId = currentUser._id === conversation.bottleSenderId 
+      const receiverId = currentUser?._id === conversation.bottleSenderId 
         ? messages[0]?.senderId || conversation.bottleSenderId // A发给B
         : conversation.bottleSenderId; // B发给A
         
       console.log('📤 发送消息详情:');
-      console.log('- 发送者ID:', currentUser._id);
-      console.log('- 发送者姓名:', currentUser.username);
+      console.log('- 发送者ID:', currentUser?._id);
+      console.log('- 发送者姓名:', currentUser?.username);
       console.log('- 原瓶子发送者ID:', conversation.bottleSenderId);
       console.log('- 计算出的接收者ID:', receiverId);
       console.log('- 瓶子ID:', conversation.bottleId);
       console.log('- 消息内容:', replyContent.trim());
       
       const result = await MessageService.sendMessage(
-        currentUser._id, // 当前用户ID
+        currentUser?._id, // 当前用户ID
         receiverId, // 正确的接收者ID
         replyContent.trim(),
         conversation.bottleId,
-        currentUser.username // 发送者姓名
+        currentUser?.username // 发送者姓名
       );
 
       console.log('回复发送成功:', result);
@@ -297,21 +313,51 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
       Alert.alert('错误', '用户信息未加载');
       return;
     }
+    
+    // 显示通话确认弹窗
+    setShowCallModal(true);
+  };
 
-    const receiverId = conversation.bottleSenderId;
-    const receiverName = conversation.bottleSenderName;
+  // 确认发起通话
+  const handleConfirmCall = async () => {
+    setShowCallModal(false);
+    
+    // 确定接收者ID - 应该是对话中的对方
+    const receiverId = currentUser?._id === conversation.bottleSenderId 
+      ? messages[0]?.senderId || conversation.bottleSenderId // A发给B
+      : conversation.bottleSenderId; // B发给A
+      
+    const receiverName = currentUser?._id === conversation.bottleSenderId 
+      ? messages[0]?.senderName || '对方' // A发给B
+      : conversation.bottleSenderName; // B发给A
     
     console.log('准备发起语音通话:');
-    console.log('发起者ID:', currentUser._id);
+    console.log('发起者ID:', currentUser?._id);
     console.log('接收者ID:', receiverId);
     console.log('接收者姓名:', receiverName);
     
-    const success = voiceCallService.initiateCall(receiverId, receiverName);
+    // 设置通话状态
+    setCallStatus('calling');
+    setCallData({
+      callId: `call_${Date.now()}`,
+      receiverId,
+      receiverName,
+      status: 'calling'
+    });
+    
+    const success = await voiceCallService.initiateCall(receiverId, receiverName);
     if (success) {
       console.log('发起语音通话成功');
     } else {
       Alert.alert('错误', '无法发起通话，请稍后重试');
+      setCallStatus('idle');
+      setCallData(null);
     }
+  };
+
+  // 取消发起通话
+  const handleCancelCall = () => {
+    setShowCallModal(false);
   };
 
   // 结束通话
@@ -321,6 +367,7 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     }
     setIsInCall(false);
     setCallData(null);
+    setCallStatus('ended');
     // 重置通话服务状态
     voiceCallService.resetCallState();
   };
@@ -333,23 +380,28 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
   };
 
   // 处理来电
-  const handleIncomingCall = (incomingCallData: any) => {
+  const handleIncomingCall = (incomingCallData: any, retryCount = 0) => {
     console.log('收到来电:', incomingCallData);
     console.log('当前用户ID:', currentUser?._id);
     console.log('来电接收者ID:', incomingCallData.receiverId);
+    console.log('重试次数:', retryCount);
     
     // 如果当前用户未加载，等待用户加载完成
     if (!currentUser) {
-      console.log('⏳ 当前用户未加载，等待用户加载完成...');
-      // 延迟重试
-      setTimeout(() => {
-        handleIncomingCall(incomingCallData);
-      }, 1000);
-      return;
+      if (retryCount < 5) {
+        console.log(`⏳ 当前用户未加载，${retryCount + 1}秒后重试...`);
+        setTimeout(() => {
+          handleIncomingCall(incomingCallData, retryCount + 1);
+        }, 1000);
+        return;
+      } else {
+        console.log('❌ 重试次数超限，放弃处理来电');
+        return;
+      }
     }
     
     // 检查是否是当前用户应该接收的通话
-    if (currentUser._id === incomingCallData.receiverId) {
+    if (currentUser?._id === incomingCallData.receiverId) {
       console.log('✅ 这是给当前用户的来电，显示接听弹窗');
       setCallData(incomingCallData);
       setIsInCall(true);
@@ -385,7 +437,7 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
           <View style={styles.messagesList}>
             {messages.map((message) => {
               // 判断消息是否来自当前用户
-              const isMyMessage = currentUser && message.senderId === currentUser._id;
+              const isMyMessage = currentUser && message.senderId === currentUser?._id;
               
               return (
                 <View
@@ -431,10 +483,18 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
       {/* 回复输入框 */}
       <View style={styles.replyContainer}>
         <TouchableOpacity
-          style={styles.callButton}
+          style={[
+            styles.callButton,
+            callStatus === 'calling' && styles.callButtonCalling,
+            callStatus === 'connected' && styles.callButtonConnected
+          ]}
           onPress={handleStartCall}
         >
-          <Ionicons name="call" size={24} color="#4ECDC4" />
+          <Ionicons 
+            name="call" 
+            size={24} 
+            color={callStatus === 'calling' || callStatus === 'connected' ? "white" : "#4ECDC4"} 
+          />
         </TouchableOpacity>
         <TextInput
           style={styles.replyInput}
@@ -456,6 +516,46 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
           />
         </TouchableOpacity>
       </View>
+
+      {/* 通话确认弹窗 */}
+      <Modal
+        visible={showCallModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCancelCall}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.callModal}>
+            <View style={styles.callModalHeader}>
+              <Ionicons name="call" size={48} color="#4ECDC4" />
+              <Text style={styles.callModalTitle}>发起语音通话</Text>
+              <Text style={styles.callModalSubtitle}>
+                即将呼叫 {currentUser?._id === conversation.bottleSenderId 
+                  ? (messages[0]?.senderName || '对方')
+                  : conversation.bottleSenderName}
+              </Text>
+            </View>
+            
+            <View style={styles.callModalButtons}>
+              <TouchableOpacity
+                style={[styles.callModalButton, styles.cancelButton]}
+                onPress={handleCancelCall}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+                <Text style={styles.cancelButtonText}>取消</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.callModalButton, styles.confirmButton]}
+                onPress={handleConfirmCall}
+              >
+                <Ionicons name="call" size={24} color="white" />
+                <Text style={styles.confirmButtonText}>呼叫</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* 语音通话界面 */}
       {isInCall && callData && (
@@ -613,10 +713,16 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: '#4ECDC4',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+  },
+  callButtonCalling: {
+    backgroundColor: '#FF6B6B',
+  },
+  callButtonConnected: {
+    backgroundColor: '#51CF66',
   },
   replyInput: {
     flex: 1,
@@ -638,5 +744,71 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     backgroundColor: '#ccc',
+  },
+  // 通话弹窗样式
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  callModal: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 30,
+    width: '80%',
+    maxWidth: 300,
+    alignItems: 'center',
+  },
+  callModalHeader: {
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  callModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 15,
+    marginBottom: 10,
+  },
+  callModalSubtitle: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
+  },
+  callModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  callModalButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    marginHorizontal: 5,
+  },
+  cancelButton: {
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  confirmButton: {
+    backgroundColor: '#4ECDC4',
+  },
+  cancelButtonText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 8,
+  },
+  confirmButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 8,
   },
 });
