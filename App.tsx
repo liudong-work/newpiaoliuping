@@ -9,6 +9,7 @@ import socketService from './src/services/socketService';
 
 // 导入页面组件
 import LoginScreen from './src/screens/LoginScreen';
+import RegisterScreen from './src/screens/RegisterScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import MessageScreen from './src/screens/MessageScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -105,8 +106,37 @@ export default function App() {
   }, []);
 
   const checkLoginStatus = async () => {
-    // 不自动登录，每次启动都显示登录界面
-    setIsLoading(false);
+    try {
+      // 检查本地存储的用户数据
+      let userData = null;
+      
+      if (Platform.OS === 'web') {
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          userData = JSON.parse(storedUser);
+        }
+      } else {
+        const storedUser = await AsyncStorage.getItem('user');
+        if (storedUser) {
+          userData = JSON.parse(storedUser);
+        }
+      }
+      
+      if (userData) {
+        console.log('🔔 发现已保存的用户数据，自动登录:', userData);
+        setUser(userData);
+        setIsLoggedIn(true);
+        
+        // 启用WebSocket连接
+        socketService.connect(userData._id);
+      } else {
+        console.log('🔔 未发现用户数据，显示登录界面');
+      }
+    } catch (error) {
+      console.error('检查登录状态失败:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleLogin = (userData: any) => {
@@ -124,30 +154,79 @@ export default function App() {
     socketService.connect(userData._id);
   };
 
+  const handleRegister = (userData: any) => {
+    setUser(userData);
+    setIsLoggedIn(true);
+    
+    // Web端兼容性处理
+    if (Platform.OS === 'web') {
+      localStorage.setItem('user', JSON.stringify(userData));
+    } else {
+      AsyncStorage.setItem('user', JSON.stringify(userData));
+    }
+    
+    // 启用WebSocket连接
+    socketService.connect(userData._id);
+  };
+
   const handleLogout = async () => {
     try {
-      console.log('App.tsx handleLogout 开始执行');
+      console.log('🔔 App.tsx handleLogout 开始执行');
       
-      // Web端兼容性处理
-      if (Platform.OS === 'web') {
-        console.log('Web端清除用户数据');
-        localStorage.removeItem('user');
-      } else {
-        console.log('移动端清除用户数据');
-        await AsyncStorage.removeItem('user');
-      }
-      
-      console.log('设置用户状态为null');
+      // 立即设置状态，确保UI立即更新
+      console.log('🔔 设置用户状态为null');
       setUser(null);
       setIsLoggedIn(false);
       
-      console.log('断开WebSocket连接');
-      // 断开WebSocket连接
-      socketService.disconnect();
+      // 清除本地存储的用户数据
+      try {
+        if (Platform.OS === 'web') {
+          console.log('🔔 Web端清除用户数据');
+          localStorage.removeItem('user');
+          // 清除其他可能的缓存数据
+          localStorage.removeItem('bottles');
+          localStorage.removeItem('messages');
+        } else {
+          console.log('🔔 移动端清除用户数据');
+          await AsyncStorage.removeItem('user');
+          await AsyncStorage.removeItem('bottles');
+          await AsyncStorage.removeItem('messages');
+        }
+        console.log('✅ 用户数据清除成功');
+      } catch (storageError) {
+        console.error('❌ 清除用户数据失败:', storageError);
+        // 即使清除失败，也继续执行退出流程
+      }
       
-      console.log('退出登录完成');
+      // 断开WebSocket连接
+      try {
+        console.log('🔔 断开WebSocket连接');
+        socketService.disconnect();
+        console.log('✅ WebSocket断开成功');
+      } catch (socketError) {
+        console.error('❌ WebSocket断开失败:', socketError);
+        // 即使WebSocket断开失败，也继续执行退出流程
+      }
+      
+      // 强制重新渲染，确保状态更新生效
+      setTimeout(() => {
+        console.log('🔔 强制状态更新');
+        setUser(null);
+        setIsLoggedIn(false);
+      }, 100);
+      
+      console.log('✅ 退出登录完成');
     } catch (error) {
-      console.error('退出登录失败:', error);
+      console.error('❌ 退出登录过程中发生错误:', error);
+      // 即使发生错误，也强制设置退出状态
+      setUser(null);
+      setIsLoggedIn(false);
+      
+      // 延迟再次设置状态，确保退出
+      setTimeout(() => {
+        setUser(null);
+        setIsLoggedIn(false);
+      }, 200);
     }
   };
 
@@ -159,8 +238,11 @@ export default function App() {
     return (
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="Register">
+            {(props) => <RegisterScreen {...props} onRegister={handleRegister} navigation={props.navigation} />}
+          </Stack.Screen>
           <Stack.Screen name="Login">
-            {(props) => <LoginScreen {...props} onLogin={handleLogin} />}
+            {(props) => <LoginScreen {...props} onLogin={handleLogin} navigation={props.navigation} />}
           </Stack.Screen>
         </Stack.Navigator>
       </NavigationContainer>

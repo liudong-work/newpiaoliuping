@@ -130,6 +130,9 @@ export const apiClient = new ApiClient();
 export const ApiService = {
   // 用户相关API
   user: {
+    // 用户登录
+    login: (loginData) => apiClient.post('/users/login', loginData),
+    
     // 检查用户名是否存在
     checkUsername: (username) => apiClient.get(`/users/check-username/${username}`),
     

@@ -35,6 +35,7 @@ export default function ProfileScreen({ navigation, onLogout }: any) {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editUsername, setEditUsername] = useState('');
   const [showVoiceTest, setShowVoiceTest] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     loadUserData();
@@ -121,33 +122,55 @@ export default function ProfileScreen({ navigation, onLogout }: any) {
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      '退出登录',
-      '确定要退出登录吗？',
-      [
-        { text: '取消', style: 'cancel' },
-        { 
-          text: '确定', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              console.log('开始退出登录...');
-              // 调用父组件的退出登录方法
-              if (onLogout) {
-                console.log('调用onLogout方法');
-                await onLogout();
-                console.log('onLogout方法执行完成');
-              } else {
-                console.log('onLogout方法不存在');
-              }
-            } catch (error) {
-              console.error('退出登录失败:', error);
-              Alert.alert('错误', '退出登录失败');
-            }
+    console.log('🔔 ProfileScreen handleLogout 被调用');
+    console.log('🔔 onLogout 方法存在:', !!onLogout);
+    
+    // 显示自定义退出确认弹窗
+    setShowLogoutModal(true);
+  };
+
+  const executeLogout = async () => {
+    try {
+      console.log('🔔 开始调用onLogout方法...');
+      
+      // 关闭弹窗
+      setShowLogoutModal(false);
+      
+      // 调用父组件的退出登录方法
+      if (onLogout) {
+        console.log('🔔 onLogout方法存在，开始执行');
+        await onLogout();
+        console.log('🔔 onLogout方法执行完成');
+        
+        // 退出成功提示
+        setTimeout(() => {
+          if (Platform.OS === 'web') {
+            alert('已成功退出登录');
+          } else {
+            Alert.alert('成功', '已成功退出登录');
           }
+        }, 500);
+      } else {
+        console.log('❌ onLogout方法不存在');
+        if (Platform.OS === 'web') {
+          alert('退出登录方法不存在，请刷新页面重试');
+        } else {
+          Alert.alert('错误', '退出登录方法不存在，请刷新页面重试');
         }
-      ]
-    );
+      }
+    } catch (error) {
+      console.error('❌ 退出登录失败:', error);
+      if (Platform.OS === 'web') {
+        alert('退出登录失败，请重试');
+      } else {
+        Alert.alert('错误', '退出登录失败，请重试');
+      }
+    }
+  };
+
+  const handleCancelLogout = () => {
+    console.log('🔔 用户取消退出登录');
+    setShowLogoutModal(false);
   };
 
   const getBottleStatus = (bottle: Bottle) => {
@@ -314,6 +337,44 @@ export default function ProfileScreen({ navigation, onLogout }: any) {
               </TouchableOpacity>
             </View>
             <SimpleVoiceTest />
+          </View>
+        </View>
+      </Modal>
+
+      {/* 退出登录确认弹窗 */}
+      <Modal
+        visible={showLogoutModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCancelLogout}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.logoutModal}>
+            <View style={styles.logoutModalHeader}>
+              <Ionicons name="log-out-outline" size={48} color="#FF6B6B" />
+              <Text style={styles.logoutModalTitle}>退出登录</Text>
+              <Text style={styles.logoutModalSubtitle}>
+                确定要退出登录吗？退出后需要重新登录才能使用应用。
+              </Text>
+            </View>
+            
+            <View style={styles.logoutModalButtons}>
+              <TouchableOpacity
+                style={[styles.logoutModalButton, styles.cancelLogoutButton]}
+                onPress={handleCancelLogout}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+                <Text style={styles.cancelLogoutButtonText}>取消</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.logoutModalButton, styles.confirmLogoutButton]}
+                onPress={executeLogout}
+              >
+                <Ionicons name="log-out-outline" size={24} color="white" />
+                <Text style={styles.confirmLogoutButtonText}>确定退出</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -586,5 +647,69 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     padding: 5,
+  },
+  // 退出登录弹窗样式
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoutModal: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 24,
+    width: '80%',
+    maxWidth: 300,
+  },
+  logoutModalHeader: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  logoutModalTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  logoutModalSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  logoutModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  logoutModalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    minWidth: 100,
+    justifyContent: 'center',
+  },
+  cancelLogoutButton: {
+    backgroundColor: '#f5f5f5',
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  confirmLogoutButton: {
+    backgroundColor: '#FF6B6B',
+  },
+  cancelLogoutButtonText: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  confirmLogoutButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+    marginLeft: 8,
   },
 });

@@ -12,54 +12,71 @@ import { Ionicons } from '@expo/vector-icons';
 import ApiService from '../services/api';
 
 export default function LoginScreen({ navigation, onLogin }: any) {
-  const [username, setUsername] = useState('');
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+  });
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const validateForm = () => {
+    const { email, password } = formData;
+
+    if (!email.trim()) {
+      Alert.alert('提示', '请输入邮箱');
+      return false;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      Alert.alert('提示', '请输入有效的邮箱地址');
+      return false;
+    }
+
+    if (!password) {
+      Alert.alert('提示', '请输入密码');
+      return false;
+    }
+
+    return true;
+  };
 
   const handleLogin = async () => {
-    if (!username.trim()) {
-      if (Platform.OS === 'web') {
-        alert('请输入用户名');
-      } else {
-        Alert.alert('提示', '请输入用户名');
-      }
+    if (!validateForm()) {
       return;
     }
 
     setIsLoading(true);
     try {
-      // 检查用户名是否已存在
-      const result = await ApiService.user.checkUsername(username.trim());
-      
-      if (result.exists) {
-        if (Platform.OS === 'web') {
-          alert('用户名已存在，请选择其他用户名');
-        } else {
-          Alert.alert('提示', '用户名已存在，请选择其他用户名');
-        }
-        return;
-      }
-
-      // 创建新用户
-      const userResult = await ApiService.user.create({
-        username: username.trim(),
-        avatar: username.trim().charAt(0).toUpperCase(),
-        createdAt: new Date().toISOString(),
+      // 调用登录接口
+      const result = await ApiService.user.login({
+        email: formData.email.trim(),
+        password: formData.password,
       });
 
-      console.log('用户创建成功:', userResult);
+      console.log('登录成功:', result);
 
       // 登录成功，调用onLogin回调
-      onLogin(userResult.user);
+      onLogin(result.user);
       
     } catch (error) {
       console.error('登录失败:', error);
-      if (Platform.OS === 'web') {
-        alert('登录失败，请重试');
-      } else {
-        Alert.alert('错误', '登录失败，请重试');
-      }
+      Alert.alert('错误', '邮箱或密码错误，请重试');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const goToRegister = () => {
+    if (navigation) {
+      navigation.navigate('Register');
     }
   };
 
@@ -70,21 +87,46 @@ export default function LoginScreen({ navigation, onLogin }: any) {
           <Ionicons name="water" size={60} color="#4A90E2" />
         </View>
         <Text style={styles.title}>漂流瓶</Text>
-        <Text style={styles.subtitle}>连接世界，传递温暖</Text>
+        <Text style={styles.subtitle}>登录账户，继续漂流</Text>
       </View>
 
       <View style={styles.formContainer}>
+        {/* 邮箱输入 */}
         <View style={styles.inputContainer}>
-          <Ionicons name="person-outline" size={24} color="#666" style={styles.inputIcon} />
+          <Ionicons name="mail-outline" size={24} color="#666" style={styles.inputIcon} />
           <TextInput
             style={styles.input}
-            placeholder="请输入用户名"
-            value={username}
-            onChangeText={setUsername}
-            maxLength={20}
+            placeholder="请输入邮箱"
+            value={formData.email}
+            onChangeText={(value) => handleInputChange('email', value)}
+            keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
           />
+        </View>
+
+        {/* 密码输入 */}
+        <View style={styles.inputContainer}>
+          <Ionicons name="lock-closed-outline" size={24} color="#666" style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="请输入密码"
+            value={formData.password}
+            onChangeText={(value) => handleInputChange('password', value)}
+            secureTextEntry={!showPassword}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <TouchableOpacity
+            onPress={() => setShowPassword(!showPassword)}
+            style={styles.eyeIcon}
+          >
+            <Ionicons 
+              name={showPassword ? "eye-outline" : "eye-off-outline"} 
+              size={24} 
+              color="#666" 
+            />
+          </TouchableOpacity>
         </View>
 
         <TouchableOpacity
@@ -93,15 +135,19 @@ export default function LoginScreen({ navigation, onLogin }: any) {
           disabled={isLoading}
         >
           {isLoading ? (
-            <Text style={styles.loginButtonText}>创建中...</Text>
+            <Text style={styles.loginButtonText}>登录中...</Text>
           ) : (
-            <Text style={styles.loginButtonText}>开始漂流</Text>
+            <Text style={styles.loginButtonText}>立即登录</Text>
           )}
         </TouchableOpacity>
 
-        <Text style={styles.tipText}>
-          用户名将作为你的身份标识，请选择一个独特的名字
-        </Text>
+        {/* 注册链接 */}
+        <View style={styles.registerLinkContainer}>
+          <Text style={styles.registerLinkText}>还没有账户？</Text>
+          <TouchableOpacity onPress={goToRegister}>
+            <Text style={styles.registerLink}>立即注册</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -161,6 +207,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
+  eyeIcon: {
+    padding: 5,
+  },
   loginButton: {
     backgroundColor: '#4A90E2',
     borderRadius: 12,
@@ -177,10 +226,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
-  tipText: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    lineHeight: 20,
+  registerLinkContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  registerLinkText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  registerLink: {
+    fontSize: 16,
+    color: '#4A90E2',
+    fontWeight: 'bold',
+    marginLeft: 5,
   },
 });

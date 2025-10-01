@@ -27,8 +27,10 @@ let useMemoryStorage = false;
 mongoose.connect(MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 5000, // 5秒超时
 }).then(() => {
   console.log('MongoDB连接成功: ' + MONGODB_URI);
+  useMemoryStorage = false;
 }).catch(err => {
   console.error('MongoDB连接失败，使用内存存储:', err.message);
   useMemoryStorage = true;
@@ -43,6 +45,7 @@ let memoryUsers = [];
 const userSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
   avatar: String,
   createdAt: { type: Date, default: Date.now }
 });
@@ -88,6 +91,49 @@ app.get('/', (req, res) => {
       users: '/api/users'
     }
   });
+});
+
+// 用户登录接口
+app.post('/api/users/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      return res.status(400).json({ message: '邮箱和密码不能为空' });
+    }
+    
+    if (useMemoryStorage) {
+      // 在内存中查找用户
+      const user = memoryUsers.find(u => u.email === email);
+      if (!user) {
+        return res.status(401).json({ message: '邮箱或密码错误' });
+      }
+      
+      // 验证密码
+      if (password !== user.password) {
+        return res.status(401).json({ message: '邮箱或密码错误' });
+      }
+      
+      console.log('用户登录成功:', user);
+      res.json({ message: '登录成功', user });
+    } else {
+      // MongoDB登录
+      const user = await User.findOne({ email });
+      if (!user) {
+        return res.status(401).json({ message: '邮箱或密码错误' });
+      }
+      
+      // 验证密码
+      if (password !== user.password) {
+        return res.status(401).json({ message: '邮箱或密码错误' });
+      }
+      
+      console.log('用户登录成功:', user);
+      res.json({ message: '登录成功', user });
+    }
+  } catch (error) {
+    res.status(500).json({ message: '服务器错误', error: error.message });
+  }
 });
 
 // 用户相关接口
@@ -380,22 +426,38 @@ app.get('/api/users/check-username/:username', (req, res) => {
 // 创建用户
 app.post('/api/users', (req, res) => {
   try {
-    const { username, avatar } = req.body;
+    const { username, email, password, avatar } = req.body;
     
     if (!username) {
       return res.status(400).json({ message: '用户名不能为空' });
     }
+
+    if (!email) {
+      return res.status(400).json({ message: '邮箱不能为空' });
+    }
+
+    if (!password) {
+      return res.status(400).json({ message: '密码不能为空' });
+    }
     
     if (useMemoryStorage) {
       // 检查用户名是否已存在
-      const exists = memoryUsers.some(user => user.username === username);
-      if (exists) {
+      const usernameExists = memoryUsers.some(user => user.username === username);
+      if (usernameExists) {
         return res.status(400).json({ message: '用户名已存在' });
+      }
+
+      // 检查邮箱是否已存在
+      const emailExists = memoryUsers.some(user => user.email === email);
+      if (emailExists) {
+        return res.status(400).json({ message: '邮箱已存在' });
       }
       
       const newUser = {
         _id: 'user_' + Date.now(),
         username,
+        email,
+        password,
         avatar: avatar || username.charAt(0).toUpperCase(),
         createdAt: new Date().toISOString(),
       };
@@ -407,6 +469,8 @@ app.post('/api/users', (req, res) => {
       // MongoDB创建
       const newUser = new User({
         username,
+        email,
+        password,
         avatar: avatar || username.charAt(0).toUpperCase(),
       });
       
