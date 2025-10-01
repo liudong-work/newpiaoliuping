@@ -454,9 +454,15 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
               // 调试信息
               console.log('🔍 消息归属判断:');
               console.log('- 当前用户ID:', currentUser?._id);
+              console.log('- 当前用户ID类型:', typeof currentUser?._id);
               console.log('- 消息发送者ID:', message.senderId);
+              console.log('- 消息发送者ID类型:', typeof message.senderId);
+              console.log('- 消息发送者姓名:', message.senderName);
+              console.log('- 当前用户姓名:', currentUser?.username);
               console.log('- 是否是我的消息:', isMyMessage);
               console.log('- 消息内容:', message.content);
+              console.log('- 严格相等比较:', currentUser?._id === message.senderId);
+              console.log('- 字符串比较:', String(currentUser?._id) === String(message.senderId));
               
               return (
                 <View

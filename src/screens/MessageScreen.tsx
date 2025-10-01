@@ -46,19 +46,30 @@ export default function MessageScreen({ navigation }: any) {
 
   useEffect(() => {
     loadCurrentUser();
-    loadMessages();
     
     // 启用WebSocket监听
     socketService.onNewMessage(handleNewMessage);
     
     // 添加定时刷新，每10秒刷新一次消息列表（作为备用）
-    const interval = setInterval(loadMessages, 10000);
+    const interval = setInterval(() => {
+      if (currentUser) {
+        loadMessages();
+      }
+    }, 10000);
     
     return () => {
       clearInterval(interval);
       socketService.offNewMessage(handleNewMessage);
     };
   }, []);
+
+  // 当currentUser加载完成后，加载消息
+  useEffect(() => {
+    if (currentUser) {
+      console.log('🔔 当前用户已加载，开始加载消息:', currentUser._id);
+      loadMessages();
+    }
+  }, [currentUser]);
 
   const handleNewMessage = (newMessage: any) => {
     console.log('消息列表收到新消息:', newMessage);
@@ -104,9 +115,15 @@ export default function MessageScreen({ navigation }: any) {
   };
 
   const loadMessages = async () => {
+    if (!currentUser) {
+      console.log('⏳ 当前用户未加载，等待用户数据...');
+      return;
+    }
+    
     setIsLoading(true);
     try {
       console.log('开始加载消息...');
+      console.log('当前用户ID:', currentUser._id);
       
       // 获取所有消息和瓶子
       const [allMessages, allBottles] = await Promise.all([
@@ -119,8 +136,25 @@ export default function MessageScreen({ navigation }: any) {
       
       setBottles(allBottles.bottles);
       
+      // 过滤出当前用户相关的消息（发送、接收、或瓶子相关）
+      const userRelatedMessages = allMessages.filter((msg: any) => {
+        // 1. 当前用户发送或接收的消息
+        const isDirectMessage = msg.senderId === currentUser._id || msg.receiverId === currentUser._id;
+        
+        // 2. 当前用户扔的瓶子被回复的消息
+        const bottleInfo = allBottles.bottles.find((bottle: any) => bottle._id === msg.bottleId);
+        const isBottleRelated = bottleInfo && bottleInfo.senderId === currentUser._id;
+        
+        const isRelated = isDirectMessage || isBottleRelated;
+        
+        console.log(`消息 ${msg._id}: 发送者=${msg.senderId}, 接收者=${msg.receiverId}, 瓶子发送者=${bottleInfo?.senderId}, 是否相关=${isRelated}`);
+        return isRelated;
+      });
+      
+      console.log('当前用户相关消息数量:', userRelatedMessages.length);
+      
       // 格式化消息数据，并添加瓶子信息
-      const formattedMessages: Message[] = allMessages.map((msg: any) => {
+      const formattedMessages: Message[] = userRelatedMessages.map((msg: any) => {
         // 从消息中提取瓶子信息（如果后端没有提供，我们需要从瓶子ID获取）
         const bottleInfo = allBottles.bottles.find((bottle: any) => bottle._id === msg.bottleId);
         
