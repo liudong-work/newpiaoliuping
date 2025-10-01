@@ -52,11 +52,13 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
   const [callStatus, setCallStatus] = useState<'idle' | 'calling' | 'connected' | 'ended'>('idle');
 
   useEffect(() => {
-    loadCurrentUser();
-    loadConversationMessages();
+    // 先加载当前用户，再加载消息
+    const initializeData = async () => {
+      await loadCurrentUser();
+      await loadConversationMessages();
+    };
     
-    // 启用WebSocket监听
-    socketService.onNewMessage(handleNewMessage);
+    initializeData();
     
     // 设置通话监听
     voiceCallService.addCallListener(handleCallEvent);
@@ -65,34 +67,26 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     socketService.onVoiceCallIncoming(handleIncomingCall);
     
     return () => {
-      socketService.offNewMessage(handleNewMessage);
       voiceCallService.removeCallListener(handleCallEvent);
       socketService.offVoiceCallIncoming(handleIncomingCall);
     };
   }, []);
 
-  // 当currentUser加载完成后，重新设置WebSocket监听
+  // 当currentUser加载完成后，设置WebSocket监听
   useEffect(() => {
     if (currentUser) {
-      console.log('🔔 当前用户已加载，重新设置WebSocket监听:', currentUser._id);
+      console.log('🔔 当前用户已加载，设置WebSocket监听:', currentUser._id);
       console.log('🔔 当前对话bottleId:', conversation.bottleId);
-      socketService.offNewMessage(handleNewMessage);
       socketService.onNewMessage(handleNewMessage);
     } else {
       console.log('⏳ 当前用户未加载，等待用户数据...');
     }
-  }, [currentUser]);
 
-  // 确保在组件挂载时也设置监听器
-  useEffect(() => {
-    console.log('🔔 组件挂载，设置WebSocket监听器');
-    socketService.onNewMessage(handleNewMessage);
-    
     return () => {
-      console.log('🔔 组件卸载，移除WebSocket监听器');
+      console.log('🔔 移除WebSocket监听器');
       socketService.offNewMessage(handleNewMessage);
     };
-  }, []);
+  }, [currentUser]);
 
   const handleNewMessage = (newMessage: any, _retryCount = 0) => {
     console.log('🔔 对话详情收到新消息:', newMessage);
@@ -456,6 +450,13 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
             {messages.map((message) => {
               // 判断消息是否来自当前用户
               const isMyMessage = currentUser && message.senderId === currentUser?._id;
+              
+              // 调试信息
+              console.log('🔍 消息归属判断:');
+              console.log('- 当前用户ID:', currentUser?._id);
+              console.log('- 消息发送者ID:', message.senderId);
+              console.log('- 是否是我的消息:', isMyMessage);
+              console.log('- 消息内容:', message.content);
               
               return (
                 <View
