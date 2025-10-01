@@ -111,7 +111,13 @@ class SocketService {
   // 监听语音通话事件
   onVoiceCallIncoming(callback) {
     if (this.socket) {
-      this.socket.on('voice-call-incoming', callback);
+      console.log('🔔 注册语音通话监听器');
+      this.socket.on('voice-call-incoming', (data) => {
+        console.log('🔔🔔🔔 WebSocket收到语音通话事件:', data);
+        callback(data);
+      });
+    } else {
+      console.log('❌ Socket未连接，无法注册语音通话监听器');
     }
   }
 

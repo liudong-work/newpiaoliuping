@@ -14,6 +14,7 @@ interface VoiceCallScreenProps {
   callerName: string;
   callerId: string;
   isIncoming: boolean;
+  isConnected?: boolean;
   onEndCall: () => void;
   onAnswerCall?: () => void;
 }
@@ -22,10 +23,11 @@ export default function VoiceCallScreen({
   callerName,
   callerId,
   isIncoming,
+  isConnected = false,
   onEndCall,
   onAnswerCall,
 }: VoiceCallScreenProps) {
-  const [isConnected, setIsConnected] = useState(false);
+  const [callConnected, setCallConnected] = useState(isConnected);
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
@@ -36,7 +38,7 @@ export default function VoiceCallScreen({
     if (isIncoming) {
       playRingtone();
     }
-    if (isConnected) {
+    if (callConnected) {
       startTimer();
     }
     return () => {
@@ -47,15 +49,27 @@ export default function VoiceCallScreen({
         sound.unloadAsync();
       }
     };
-  }, [isIncoming, isConnected]);
+  }, [isIncoming, callConnected]);
+
+  // 监听外部传入的 isConnected 状态变化
+  useEffect(() => {
+    console.log('🔔 VoiceCallScreen isConnected 状态变化:', isConnected);
+    setCallConnected(isConnected);
+    if (isConnected) {
+      console.log('🔔 通话已连接，开始计时');
+      startTimer();
+    }
+  }, [isConnected]);
 
   const playRingtone = async () => {
     try {
+      console.log('🔔 开始播放来电铃声');
       const { sound: ringtone } = await Audio.Sound.createAsync(
         { uri: 'https://www.soundjay.com/misc/sounds/bell-ringing-05.wav' },
         { shouldPlay: true, isLooping: true }
       );
       setSound(ringtone);
+      console.log('✅ 来电铃声已开始播放');
     } catch (error) {
       console.log('无法播放铃声:', error);
     }
@@ -63,15 +77,24 @@ export default function VoiceCallScreen({
 
   const stopRingtone = async () => {
     if (sound) {
+      console.log('🔔 停止铃声播放');
       await sound.stopAsync();
       await sound.unloadAsync();
       setSound(null);
+      console.log('✅ 铃声已停止');
     }
   };
 
   const startTimer = () => {
+    console.log('🔔 开始通话计时器');
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
     intervalRef.current = setInterval(() => {
-      setCallDuration(prev => prev + 1);
+      setCallDuration(prev => {
+        console.log('🔔 通话时间更新:', prev + 1);
+        return prev + 1;
+      });
     }, 1000);
   };
 
@@ -84,8 +107,9 @@ export default function VoiceCallScreen({
 
   const handleAnswerCall = async () => {
     try {
+      console.log('🔔 接听通话，停止铃声');
       await stopRingtone();
-      setIsConnected(true);
+      setCallConnected(true);
       onAnswerCall?.();
       
       await Audio.setAudioModeAsync({
@@ -94,6 +118,8 @@ export default function VoiceCallScreen({
         shouldDuckAndroid: true,
         playThroughEarpieceAndroid: false,
       });
+      
+      console.log('✅ 通话已接听，铃声已停止');
     } catch (error) {
       console.error('接听通话失败:', error);
       Alert.alert('错误', '接听通话失败');
@@ -102,10 +128,12 @@ export default function VoiceCallScreen({
 
   const handleEndCall = async () => {
     try {
+      console.log('🔔 结束通话，停止铃声');
       await stopRingtone();
       stopTimer();
-      setIsConnected(false);
+      setCallConnected(false);
       onEndCall();
+      console.log('✅ 通话已结束，铃声已停止');
     } catch (error) {
       console.error('结束通话失败:', error);
     }
@@ -151,16 +179,16 @@ export default function VoiceCallScreen({
         </View>
         <Text style={styles.userName}>{callerName}</Text>
         <Text style={styles.callStatus}>
-          {isIncoming && !isConnected
+          {isIncoming && !callConnected
             ? '来电中...'
-            : isConnected
-            ? formatDuration(callDuration)
+            : callConnected
+            ? `通话中 ${formatDuration(callDuration)}`
             : '通话结束'}
         </Text>
       </View>
 
       <View style={styles.controls}>
-        {isIncoming && !isConnected ? (
+        {isIncoming && !callConnected ? (
           <View style={styles.incomingControls}>
             <TouchableOpacity
               style={[styles.controlButton, styles.declineButton]}

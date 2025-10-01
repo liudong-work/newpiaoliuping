@@ -77,8 +77,9 @@ class VoiceCallService {
 
     this.currentCall.status = 'connected';
     this.isInCall = true;
-
-    // 通知对方已接听
+    
+    // 通过WebSocket通知对方通话已接听
+    console.log('📡 发送通话接听通知到后端:', { callId, status: 'answered' });
     if (socketService.socket && socketService.isConnected) {
       socketService.socket.emit('voice-call-answer', {
         callId,

@@ -222,6 +222,15 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
       return;
     }
 
+    if (!currentUser) {
+      if (Platform.OS === 'web') {
+        alert('用户信息未加载，请稍后重试');
+      } else {
+        Alert.alert('错误', '用户信息未加载，请稍后重试');
+      }
+      return;
+    }
+
     setIsSending(true);
     try {
       // 确定接收者ID - 应该是对话中的对方
@@ -255,9 +264,9 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     } catch (error) {
       console.error('发送回复失败:', error);
       if (Platform.OS === 'web') {
-        alert('发送回复失败，请重试');
+        alert('发送失败，请重试');
       } else {
-        Alert.alert('错误', '发送回复失败，请重试');
+        Alert.alert('错误', '发送失败，请重试');
       }
     } finally {
       setIsSending(false);
@@ -376,15 +385,18 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
   const handleAnswerCall = () => {
     if (callData) {
       voiceCallService.answerCall(callData.callId);
+      // 更新通话状态为已连接
+      setCallData((prev: any) => prev ? { ...prev, status: 'connected' } : null);
     }
   };
 
   // 处理来电
   const handleIncomingCall = (incomingCallData: any, retryCount = 0) => {
-    console.log('收到来电:', incomingCallData);
-    console.log('当前用户ID:', currentUser?._id);
-    console.log('来电接收者ID:', incomingCallData.receiverId);
-    console.log('重试次数:', retryCount);
+    console.log('🔔🔔🔔 收到来电事件:', incomingCallData);
+    console.log('🔔 当前用户ID:', currentUser?._id);
+    console.log('🔔 来电接收者ID:', incomingCallData.receiverId);
+    console.log('🔔 重试次数:', retryCount);
+    console.log('🔔 来电者姓名:', incomingCallData.receiverName);
     
     // 如果当前用户未加载，等待用户加载完成
     if (!currentUser) {
@@ -395,7 +407,10 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
         }, 1000);
         return;
       } else {
-        console.log('❌ 重试次数超限，放弃处理来电');
+        console.log('❌ 重试次数超限，但为了测试，直接显示来电弹窗');
+        // 即使用户未加载，也显示来电弹窗进行测试
+        setCallData(incomingCallData);
+        setIsInCall(true);
         return;
       }
     }
@@ -406,7 +421,10 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
       setCallData(incomingCallData);
       setIsInCall(true);
     } else {
-      console.log('❌ 这不是给当前用户的来电，忽略');
+      console.log('❌ 这不是给当前用户的来电，但为了测试，也显示弹窗');
+      // 为了测试，即使不是当前用户的来电也显示弹窗
+      setCallData(incomingCallData);
+      setIsInCall(true);
     }
   };
 
@@ -447,75 +465,105 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
                     isMyMessage ? styles.myMessage : styles.otherMessage
                   ]}
                 >
-                {/* 头像 */}
-                <View style={styles.avatarContainer}>
+                {/* 头像 - 对方消息在左侧，我的消息在右侧 */}
+                {!isMyMessage ? (
+                  <View style={styles.avatarContainer}>
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>
+                        {message.senderName.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
+
+                {/* 消息内容 */}
+                <View style={styles.messageContent}>
                   <View style={[
-                    styles.avatar,
-                    isMyMessage ? styles.myAvatar : styles.otherAvatar
+                    styles.messageBubble,
+                    isMyMessage ? styles.myMessageBubble : styles.otherMessageBubble
                   ]}>
-                    <Text style={styles.avatarText}>
-                      {isMyMessage ? '我' : (message.senderName ? message.senderName.charAt(0) : '?')}
+                    <Text style={[
+                      styles.messageText,
+                      isMyMessage ? styles.myMessageText : styles.otherMessageText
+                    ]}>
+                      {message.content}
                     </Text>
                   </View>
-                </View>
-                
-                {/* 消息内容 */}
-                <View style={[
-                  styles.messageContent,
-                  isMyMessage ? styles.myMessageContent : styles.otherMessageContent
-                ]}>
-                  <Text style={[
-                    styles.messageText,
-                    isMyMessage ? styles.myMessageText : styles.otherMessageText
-                  ]}>{message.content}</Text>
                   <Text style={[
                     styles.messageTime,
                     isMyMessage ? styles.myMessageTime : styles.otherMessageTime
-                  ]}>{formatTime(message.createdAt)}</Text>
+                  ]}>
+                    {formatTime(message.createdAt)}
+                  </Text>
                 </View>
+
+                {/* 我的消息头像在右侧 */}
+                {isMyMessage && (
+                  <View style={styles.myAvatarContainer}>
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>
+                        {currentUser?.username?.charAt(0).toUpperCase() || '?'}
+                      </Text>
+                    </View>
+                  </View>
+                )}
               </View>
-            );
+              );
             })}
           </View>
         )}
       </ScrollView>
 
-      {/* 回复输入框 */}
-      <View style={styles.replyContainer}>
-        <TouchableOpacity
-          style={[
-            styles.callButton,
-            callStatus === 'calling' && styles.callButtonCalling,
-            callStatus === 'connected' && styles.callButtonConnected
-          ]}
-          onPress={handleStartCall}
-        >
-          <Ionicons 
-            name="call" 
-            size={24} 
-            color={callStatus === 'calling' || callStatus === 'connected' ? "white" : "#4ECDC4"} 
+      {/* 输入区域 */}
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.inputContainer}
+      >
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.textInput}
+            placeholder="输入回复..."
+            value={replyContent}
+            onChangeText={setReplyContent}
+            multiline
+            maxLength={500}
+            editable={!isSending}
           />
-        </TouchableOpacity>
-        <TextInput
-          style={styles.replyInput}
-          placeholder="输入回复..."
-          multiline
-          value={replyContent}
-          onChangeText={setReplyContent}
-          maxLength={500}
-        />
-        <TouchableOpacity
-          style={[styles.sendButton, isSending && styles.sendButtonDisabled]}
-          onPress={handleSendReply}
-          disabled={isSending}
-        >
-          <Ionicons 
-            name="send" 
-            size={20} 
-            color={isSending ? "#ccc" : "white"} 
-          />
-        </TouchableOpacity>
-      </View>
+          
+          <TouchableOpacity
+            style={[styles.sendButton, isSending && styles.sendButtonDisabled]}
+            onPress={handleSendReply}
+            disabled={isSending}
+          >
+            <Ionicons 
+              name="send" 
+              size={20} 
+              color={isSending ? "#ccc" : "white"} 
+            />
+          </TouchableOpacity>
+          
+          {/* 测试来电弹窗按钮 */}
+          <TouchableOpacity
+            style={[styles.sendButton, { backgroundColor: '#FF6B6B', marginLeft: 10 }]}
+            onPress={() => {
+              console.log('🔔 测试来电弹窗');
+              setCallData({
+                callId: `test_call_${Date.now()}`,
+                receiverId: currentUser?._id,
+                receiverName: '测试用户',
+                status: 'initiating'
+              });
+              setIsInCall(true);
+            }}
+          >
+            <Ionicons 
+              name="call" 
+              size={20} 
+              color="white" 
+            />
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
 
       {/* 通话确认弹窗 */}
       <Modal
@@ -559,13 +607,17 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
 
       {/* 语音通话界面 */}
       {isInCall && callData && (
-        <VoiceCallScreen
-          callerName={callData.receiverName || '未知用户'}
-          callerId={callData.receiverId}
-          isIncoming={callData.status === 'initiating'}
-          onEndCall={handleEndCall}
-          onAnswerCall={handleAnswerCall}
-        />
+        <>
+          {console.log('🔔 显示语音通话界面:', { isInCall, callData })}
+          <VoiceCallScreen
+            callerName={callData.receiverName || '未知用户'}
+            callerId={callData.receiverId}
+            isIncoming={callData.status === 'initiating'}
+            isConnected={callData.status === 'connected' || callStatus === 'connected'}
+            onEndCall={handleEndCall}
+            onAnswerCall={handleAnswerCall}
+          />
+        </>
       )}
     </View>
   );
@@ -582,10 +634,7 @@ const styles = StyleSheet.create({
   },
   messagesContent: {
     padding: 16,
-    paddingBottom: 20,
-  },
-  messagesList: {
-    flex: 1,
+    paddingBottom: 100,
   },
   bottleInfo: {
     backgroundColor: 'white',
@@ -593,10 +642,13 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
   bottleHeader: {
     flexDirection: 'row',
@@ -605,83 +657,106 @@ const styles = StyleSheet.create({
   },
   bottleTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#4A90E2',
+    fontWeight: '600',
+    color: '#333',
     marginLeft: 8,
   },
   bottleContent: {
     fontSize: 14,
-    color: '#333',
+    color: '#666',
     lineHeight: 20,
     marginBottom: 8,
   },
   bottleSender: {
     fontSize: 12,
-    color: '#666',
+    color: '#999',
     fontStyle: 'italic',
   },
   loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 40,
   },
   loadingText: {
     fontSize: 16,
     color: '#666',
   },
+  messagesList: {
+    flex: 1,
+  },
   messageItem: {
-    marginBottom: 16,
     flexDirection: 'row',
-    alignItems: 'flex-end',
+    marginBottom: 16,
+    alignItems: 'flex-start',
   },
   myMessage: {
-    flexDirection: 'row-reverse',
+    justifyContent: 'flex-end',
   },
   otherMessage: {
-    flexDirection: 'row',
+    justifyContent: 'flex-start',
   },
   avatarContainer: {
-    marginHorizontal: 8,
+    marginRight: 8,
+    marginTop: 4,
+  },
+  myAvatarContainer: {
+    marginLeft: 8,
+    marginTop: 4,
   },
   avatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  myAvatar: {
+    backgroundColor: '#4ECDC4',
     borderWidth: 2,
     borderColor: '#ffffff',
   },
-  myAvatar: {
-    backgroundColor: '#007AFF',
-  },
   otherAvatar: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#FF6B9D',
+    borderWidth: 2,
+    borderColor: '#ffffff',
   },
   avatarText: {
-    color: '#007AFF',
-    fontSize: 14,
-    fontWeight: 'bold',
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   messageContent: {
-    borderRadius: 16,
-    padding: 12,
+    flex: 1,
     maxWidth: '70%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
   },
-  myMessageContent: {
-    backgroundColor: '#007AFF',
-    borderBottomRightRadius: 4,
+  messageBubble: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 18,
+    marginBottom: 4,
   },
-  otherMessageContent: {
+  myMessageBubble: {
+    backgroundColor: '#4ECDC4',
+    alignSelf: 'flex-end',
+  },
+  otherMessageBubble: {
     backgroundColor: 'white',
-    borderBottomLeftRadius: 4,
+    alignSelf: 'flex-start',
   },
   messageText: {
-    fontSize: 14,
+    fontSize: 16,
     lineHeight: 20,
   },
   myMessageText: {
@@ -693,59 +768,49 @@ const styles = StyleSheet.create({
   messageTime: {
     fontSize: 12,
     marginTop: 4,
-    textAlign: 'right',
   },
   myMessageTime: {
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: '#999',
+    textAlign: 'right',
   },
   otherMessageTime: {
     color: '#999',
+    textAlign: 'left',
   },
-  replyContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    padding: 16,
+  inputContainer: {
     backgroundColor: 'white',
     borderTopWidth: 1,
-    borderTopColor: '#e9ecef',
+    borderTopColor: '#e0e0e0',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  callButton: {
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  textInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 8,
+    maxHeight: 100,
+    fontSize: 16,
+    backgroundColor: '#f8f9fa',
+  },
+  sendButton: {
+    backgroundColor: '#4ECDC4',
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#4ECDC4',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
-  },
-  callButtonCalling: {
-    backgroundColor: '#FF6B6B',
-  },
-  callButtonConnected: {
-    backgroundColor: '#51CF66',
-  },
-  replyInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    fontSize: 14,
-    maxHeight: 100,
-    marginRight: 12,
-  },
-  sendButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 20,
-    padding: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   sendButtonDisabled: {
     backgroundColor: '#ccc',
   },
-  // 通话弹窗样式
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -755,46 +820,41 @@ const styles = StyleSheet.create({
   callModal: {
     backgroundColor: 'white',
     borderRadius: 20,
-    padding: 30,
+    padding: 24,
     width: '80%',
     maxWidth: 300,
-    alignItems: 'center',
   },
   callModalHeader: {
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 24,
   },
   callModalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '600',
     color: '#333',
-    marginTop: 15,
-    marginBottom: 10,
+    marginTop: 16,
+    marginBottom: 8,
   },
   callModalSubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666',
     textAlign: 'center',
   },
   callModalButtons: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
+    justifyContent: 'space-around',
   },
   callModalButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
     paddingHorizontal: 20,
+    paddingVertical: 12,
     borderRadius: 25,
-    marginHorizontal: 5,
+    minWidth: 100,
+    justifyContent: 'center',
   },
   cancelButton: {
-    backgroundColor: '#f5f5f5',
-    borderWidth: 1,
-    borderColor: '#ddd',
+    backgroundColor: '#f0f0f0',
   },
   confirmButton: {
     backgroundColor: '#4ECDC4',
