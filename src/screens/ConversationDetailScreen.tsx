@@ -520,6 +520,18 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
         style={styles.inputContainer}
       >
         <View style={styles.inputRow}>
+          {/* 拨打电话按钮 */}
+          <TouchableOpacity
+            style={[styles.sendButton, { backgroundColor: '#4ECDC4', marginRight: 10 }]}
+            onPress={handleStartCall}
+          >
+            <Ionicons 
+              name="call" 
+              size={20} 
+              color="white" 
+            />
+          </TouchableOpacity>
+          
           <TextInput
             style={styles.textInput}
             placeholder="输入回复..."
