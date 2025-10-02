@@ -146,6 +146,20 @@ class SocketService {
     }
   }
 
+  // 设置WebRTC信令监听器
+  onWebRTCSignaling(callback) {
+    if (this.socket) {
+      this.socket.on('webrtc-signaling', callback);
+    }
+  }
+
+  // 移除WebRTC信令监听器
+  offWebRTCSignaling(callback) {
+    if (this.socket) {
+      this.socket.off('webrtc-signaling', callback);
+    }
+  }
+
   // 移除语音通话监听
   offVoiceCallIncoming(callback) {
     if (this.socket) {

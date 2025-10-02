@@ -145,9 +145,12 @@ export default function MessageScreen({ navigation }: any) {
         const bottleInfo = allBottles.bottles.find((bottle: any) => bottle._id === msg.bottleId);
         const isBottleRelated = bottleInfo && bottleInfo.senderId === currentUser._id;
         
-        const isRelated = isDirectMessage || isBottleRelated;
+        // 3. 当前用户捡到的瓶子并回复的消息
+        const isPickedBottle = bottleInfo && bottleInfo.pickedBy === currentUser._id;
         
-        console.log(`消息 ${msg._id}: 发送者=${msg.senderId}, 接收者=${msg.receiverId}, 瓶子发送者=${bottleInfo?.senderId}, 是否相关=${isRelated}`);
+        const isRelated = isDirectMessage || isBottleRelated || isPickedBottle;
+        
+        console.log(`消息 ${msg._id}: 发送者=${msg.senderId}, 接收者=${msg.receiverId}, 瓶子发送者=${bottleInfo?.senderId}, 瓶子捡取者=${bottleInfo?.pickedBy}, 是否相关=${isRelated}`);
         return isRelated;
       });
       
@@ -186,17 +189,25 @@ export default function MessageScreen({ navigation }: any) {
       // 只为有消息的瓶子创建对话条目
       allBottles.bottles.forEach((bottle: any) => {
         if (bottlesWithMessages.has(bottle._id)) {
+          // 确定对话的显示名称：如果是当前用户捡到的瓶子，显示原发送者；如果是当前用户扔的瓶子，显示捡取者
+          let displayName = bottle.senderName;
+          if (bottle.pickedBy === currentUser._id) {
+            displayName = bottle.senderName; // 显示原瓶子发送者
+          } else if (bottle.senderId === currentUser._id) {
+            displayName = '捡到瓶子的人'; // 显示捡取者（如果有的话）
+          }
+          
           conversationMap.set(bottle._id, {
             bottleId: bottle._id,
             bottleContent: bottle.content,
-            bottleSenderName: bottle.senderName,
+            bottleSenderName: displayName,
             bottleSenderId: bottle.senderId,
             lastMessage: {
               _id: 'bottle_' + bottle._id,
               senderId: bottle.senderId,
               receiverId: '',
               content: bottle.content,
-              senderName: bottle.senderName,
+              senderName: displayName,
               isRead: true,
               createdAt: bottle.createdAt,
               bottleId: bottle._id,

@@ -1,4 +1,5 @@
 import { socketService } from './socketService';
+import webrtcService from './webrtcService';
 
 // 检查WebRTC支持情况
 let webrtcSupported = false;
@@ -19,8 +20,15 @@ class VoiceCallService {
     console.log('🎉 VoiceCallService 初始化完成');
   }
 
+  // 设置当前通话（用于接收方）
+  setCurrentCall(callData) {
+    console.log('🔔 设置当前通话:', callData);
+    this.currentCall = callData;
+    this.isInCall = true;
+  }
+
   // 发起语音通话
-  initiateCall(receiverId, receiverName) {
+  async initiateCall(receiverId, receiverName) {
     console.log('🚀 VoiceCallService.initiateCall 开始');
     console.log('📊 当前状态检查:');
     console.log('- this.isInCall:', this.isInCall);
@@ -44,55 +52,87 @@ class VoiceCallService {
       return false;
     }
 
-    const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const callData = {
-      callId,
-      receiverId,
-      receiverName,
-      timestamp: Date.now(),
-      status: 'initiating',
-      webrtcSupported: webrtcSupported
-    };
+    try {
+      const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const callData = {
+        callId,
+        receiverId,
+        receiverName,
+        timestamp: Date.now(),
+        status: 'initiating',
+        webrtcSupported: webrtcSupported
+      };
 
-    this.currentCall = callData;
-    this.isInCall = true;
+      this.currentCall = callData;
+      this.isInCall = true;
 
-    // 通过WebSocket发送通话请求
-    console.log('📡 发送语音通话请求到后端:', callData);
-    socketService.socket.emit('voice-call-initiate', callData);
-    
-    console.log('✅ 发起语音通话成功:', callData);
-    console.log('📱 WebRTC支持状态:', webrtcSupported ? '完整功能' : '模拟模式');
-    this.notifyListeners('call-initiated', callData);
-    
-    return true;
+      // 初始化WebRTC连接（作为发起方）
+      console.log('🔔 初始化WebRTC连接（发起方）');
+      const webrtcSuccess = await webrtcService.initializeCall(callId, true);
+      
+      if (!webrtcSuccess) {
+        console.error('❌ WebRTC初始化失败');
+        this.resetCallState();
+        return false;
+      }
+
+      // 通过WebSocket发送通话请求
+      console.log('📡 发送语音通话请求到后端:', callData);
+      socketService.socket.emit('voice-call-initiate', callData);
+      
+      console.log('✅ 发起语音通话成功:', callData);
+      console.log('📱 WebRTC支持状态:', webrtcSupported ? '完整功能' : '模拟模式');
+      this.notifyListeners('call-initiated', callData);
+      
+      return true;
+    } catch (error) {
+      console.error('❌ 发起通话失败:', error);
+      this.resetCallState();
+      return false;
+    }
   }
 
   // 接听通话
-  answerCall(callId) {
+  async answerCall(callId) {
     if (!this.currentCall || this.currentCall.callId !== callId) {
       console.log('无效的通话ID');
       return false;
     }
 
-    this.currentCall.status = 'connected';
-    this.isInCall = true;
-    
-    // 通过WebSocket通知对方通话已接听
-    console.log('📡 发送通话接听通知到后端:', { callId, status: 'answered' });
-    if (socketService.socket && socketService.isConnected) {
-      socketService.socket.emit('voice-call-answer', {
-        callId,
-        status: 'answered'
-      });
-    } else {
-      console.warn('WebSocket未连接，无法发送接听通知');
-    }
+    try {
+      console.log('🔔 开始接听通话，初始化WebRTC连接');
+      
+      // 初始化WebRTC连接（作为接收方）
+      const roomId = this.currentCall.callId;
+      const webrtcSuccess = await webrtcService.initializeCall(roomId, false);
+      
+      if (!webrtcSuccess) {
+        console.error('❌ WebRTC初始化失败');
+        return false;
+      }
 
-    console.log('接听通话:', callId);
-    this.notifyListeners('call-answered', this.currentCall);
-    
-    return true;
+      this.currentCall.status = 'connected';
+      this.isInCall = true;
+      
+      // 通过WebSocket通知对方通话已接听
+      console.log('📡 发送通话接听通知到后端:', { callId, status: 'answered' });
+      if (socketService.socket && socketService.isConnected) {
+        socketService.socket.emit('voice-call-answer', {
+          callId,
+          status: 'answered'
+        });
+      } else {
+        console.warn('WebSocket未连接，无法发送接听通知');
+      }
+
+      console.log('✅ 接听通话成功:', callId);
+      this.notifyListeners('call-answered', this.currentCall);
+      
+      return true;
+    } catch (error) {
+      console.error('❌ 接听通话失败:', error);
+      return false;
+    }
   }
 
   // 拒绝通话
@@ -123,38 +163,55 @@ class VoiceCallService {
   }
 
   // 结束通话
-  endCall(callId) {
+  async endCall(callId) {
     if (!this.currentCall || this.currentCall.callId !== callId) {
       console.log('无效的通话ID');
       return false;
     }
 
-    this.currentCall.status = 'ended';
-    this.isInCall = false;
+    try {
+      console.log('🔔 开始结束通话，清理WebRTC连接');
+      
+      // 结束WebRTC连接
+      await webrtcService.endCall();
+      
+      this.currentCall.status = 'ended';
+      this.isInCall = false;
 
-    // 通知对方通话已结束
-    if (socketService.socket && socketService.isConnected) {
-      socketService.socket.emit('voice-call-end', {
-        callId,
-        status: 'ended'
-      });
-    } else {
-      console.warn('WebSocket未连接，无法发送结束通知');
+      // 通知对方通话已结束
+      if (socketService.socket && socketService.isConnected) {
+        socketService.socket.emit('voice-call-end', {
+          callId,
+          status: 'ended'
+        });
+      } else {
+        console.warn('WebSocket未连接，无法发送结束通知');
+      }
+
+      console.log('✅ 结束通话成功:', callId);
+      this.notifyListeners('call-ended', this.currentCall);
+      
+      this.currentCall = null;
+      return true;
+    } catch (error) {
+      console.error('❌ 结束通话失败:', error);
+      return false;
     }
-
-    console.log('结束通话:', callId);
-    this.notifyListeners('call-ended', this.currentCall);
-    
-    this.currentCall = null;
-    return true;
   }
 
   // 重置通话状态
-  resetCallState() {
+  async resetCallState() {
     console.log('🔄 重置通话状态...');
     console.log('重置前状态:');
     console.log('- isInCall:', this.isInCall);
     console.log('- currentCall:', this.currentCall);
+    
+    try {
+      // 清理WebRTC连接
+      await webrtcService.endCall();
+    } catch (error) {
+      console.warn('清理WebRTC连接时出错:', error);
+    }
     
     this.isInCall = false;
     this.currentCall = null;
@@ -230,6 +287,30 @@ class VoiceCallService {
   // 检查是否正在通话
   isCurrentlyInCall() {
     return this.isInCall;
+  }
+
+  // 静音/取消静音
+  toggleMute() {
+    if (webrtcSupported) {
+      return webrtcService.toggleMute();
+    }
+    return false;
+  }
+
+  // 获取WebRTC连接状态
+  getWebRTCStatus() {
+    if (webrtcSupported) {
+      return {
+        isConnected: webrtcService.isConnected(),
+        hasLocalStream: !!webrtcService.getLocalStream(),
+        hasRemoteStream: !!webrtcService.getRemoteStream()
+      };
+    }
+    return {
+      isConnected: false,
+      hasLocalStream: false,
+      hasRemoteStream: false
+    };
   }
 }
 

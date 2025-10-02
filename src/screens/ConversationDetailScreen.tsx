@@ -16,6 +16,7 @@ import { MessageService } from '../services/bottleService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import socketService from '../services/socketService';
 import voiceCallService from '../services/voiceCallService';
+import webrtcService from '../services/webrtcService';
 import VoiceCallScreen from '../components/VoiceCallScreen';
 
 interface Message {
@@ -65,10 +66,18 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     
     // 设置语音通话WebSocket监听
     socketService.onVoiceCallIncoming(handleIncomingCall);
+    socketService.onVoiceCallAnswered(handleCallAnswered);
+    socketService.onVoiceCallRejected(handleCallRejected);
+    socketService.onVoiceCallEnded(handleCallEnded);
+    socketService.onWebRTCSignaling(handleWebRTCSignaling);
     
     return () => {
       voiceCallService.removeCallListener(handleCallEvent);
       socketService.offVoiceCallIncoming(handleIncomingCall);
+      socketService.offVoiceCallAnswered(handleCallAnswered);
+      socketService.offVoiceCallRejected(handleCallRejected);
+      socketService.offVoiceCallEnded(handleCallEnded);
+      socketService.offWebRTCSignaling(handleWebRTCSignaling);
     };
   }, []);
 
@@ -294,16 +303,20 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
         break;
       case 'call-answered':
         console.log('通话已接听');
+        setCallStatus('connected');
+        setCallData((prev: any) => prev ? { ...prev, status: 'connected' } : null);
         break;
       case 'call-rejected':
         console.log('通话被拒绝');
         setIsInCall(false);
         setCallData(null);
+        setCallStatus('ended');
         break;
       case 'call-ended':
         console.log('通话已结束');
         setIsInCall(false);
         setCallData(null);
+        setCallStatus('ended');
         // 重置通话服务状态
         voiceCallService.resetCallState();
         break;
@@ -317,44 +330,101 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
       return;
     }
     
+    // 检查是否正在通话中
+    if (isInCall || callStatus === 'calling' || callStatus === 'connected') {
+      Alert.alert('提示', '当前正在通话中，请先结束当前通话');
+      return;
+    }
+    
+    // 检查是否有对方用户信息
+    const otherUserId = getOtherUserId();
+    if (!otherUserId) {
+      Alert.alert('错误', '无法确定通话对象，请稍后重试');
+      return;
+    }
+    
     // 显示通话确认弹窗
     setShowCallModal(true);
+  };
+
+  // 获取对话中的对方用户ID
+  const getOtherUserId = () => {
+    if (!currentUser || !conversation) return null;
+    
+    // 如果当前用户是瓶子发送者，对方是捡到瓶子的人
+    if (currentUser._id === conversation.bottleSenderId) {
+      // 从消息中找到对方（非当前用户发送的消息）
+      const otherMessage = messages.find(msg => msg.senderId !== currentUser._id);
+      return otherMessage?.senderId || null;
+    } else {
+      // 如果当前用户是捡到瓶子的人，对方是瓶子发送者
+      return conversation.bottleSenderId;
+    }
+  };
+
+  // 获取对方用户名称
+  const getOtherUserName = () => {
+    if (!currentUser || !conversation) return '对方';
+    
+    if (currentUser._id === conversation.bottleSenderId) {
+      const otherMessage = messages.find(msg => msg.senderId !== currentUser._id);
+      return otherMessage?.senderName || '对方';
+    } else {
+      return conversation.bottleSenderName;
+    }
   };
 
   // 确认发起通话
   const handleConfirmCall = async () => {
     setShowCallModal(false);
     
-    // 确定接收者ID - 应该是对话中的对方
-    const receiverId = currentUser?._id === conversation.bottleSenderId 
-      ? messages[0]?.senderId || conversation.bottleSenderId // A发给B
-      : conversation.bottleSenderId; // B发给A
+    try {
+      // 获取对方用户信息
+      const receiverId = getOtherUserId();
+      const receiverName = getOtherUserName();
       
-    const receiverName = currentUser?._id === conversation.bottleSenderId 
-      ? messages[0]?.senderName || '对方' // A发给B
-      : conversation.bottleSenderName; // B发给A
-    
-    console.log('准备发起语音通话:');
-    console.log('发起者ID:', currentUser?._id);
-    console.log('接收者ID:', receiverId);
-    console.log('接收者姓名:', receiverName);
-    
-    // 设置通话状态
-    setCallStatus('calling');
-    setCallData({
-      callId: `call_${Date.now()}`,
-      receiverId,
-      receiverName,
-      status: 'calling'
-    });
-    
-    const success = await voiceCallService.initiateCall(receiverId, receiverName);
-    if (success) {
-      console.log('发起语音通话成功');
-    } else {
-      Alert.alert('错误', '无法发起通话，请稍后重试');
+      if (!receiverId) {
+        Alert.alert('错误', '无法确定通话对象');
+        return;
+      }
+      
+      console.log('准备发起语音通话:');
+      console.log('发起者ID:', currentUser?._id);
+      console.log('发起者姓名:', currentUser?.username);
+      console.log('接收者ID:', receiverId);
+      console.log('接收者姓名:', receiverName);
+      
+      // 设置通话状态
+      setCallStatus('calling');
+      const callData = {
+        callId: `call_${Date.now()}`,
+        receiverId,
+        receiverName,
+        status: 'calling',
+        callerName: currentUser?.username || '我',
+        callerId: currentUser?._id
+      };
+      setCallData(callData);
+      setIsInCall(true); // 发起方也需要显示通话界面
+      
+      // 发起通话
+      const success = await voiceCallService.initiateCall(receiverId, receiverName);
+      if (success) {
+        console.log('✅ 发起语音通话成功');
+        // 通话状态会在WebRTC连接建立后更新
+      } else {
+        console.error('❌ 发起语音通话失败');
+        Alert.alert('错误', '无法发起通话，请检查网络连接后重试');
+        setCallStatus('idle');
+        setCallData(null);
+        setIsInCall(false);
+      }
+    } catch (error) {
+      console.error('❌ 发起通话时发生错误:', error);
+      Alert.alert('错误', '发起通话时发生错误，请重试');
       setCallStatus('idle');
       setCallData(null);
+      setIsInCall(false);
     }
   };
 
@@ -364,23 +434,84 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
   };
 
   // 结束通话
-  const handleEndCall = () => {
+  const handleEndCall = async () => {
     if (callData) {
-      voiceCallService.endCall(callData.callId);
+      await voiceCallService.endCall(callData.callId);
     }
     setIsInCall(false);
     setCallData(null);
     setCallStatus('ended');
     // 重置通话服务状态
-    voiceCallService.resetCallState();
+    await voiceCallService.resetCallState();
   };
 
   // 接听通话
-  const handleAnswerCall = () => {
+  const handleAnswerCall = async () => {
     if (callData) {
-      voiceCallService.answerCall(callData.callId);
-      // 更新通话状态为已连接
+      console.log('🔔 开始接听通话，当前状态:', callStatus);
+      console.log('🔔 通话数据:', callData);
+      
+      // 先设置voiceCallService的currentCall
+      voiceCallService.setCurrentCall(callData);
+      
+      const success = await voiceCallService.answerCall(callData.callId);
+      if (success) {
+        // 更新通话状态为已连接
+        setCallData((prev: any) => prev ? { ...prev, status: 'connected' } : null);
+        setCallStatus('connected');
+        console.log('✅ 通话已接听，状态更新为connected');
+        console.log('🔔 接收方状态更新完成，等待WebRTC连接建立');
+      } else {
+        console.error('❌ 接听通话失败');
+        Alert.alert('错误', '接听通话失败，请重试');
+      }
+    }
+  };
+
+  // 处理通话接听事件（发起方收到）
+  const handleCallAnswered = (answerData: any) => {
+    console.log('🔔 收到通话接听通知:', answerData);
+    console.log('🔔 当前通话ID:', callData?.callId);
+    console.log('🔔 通知通话ID:', answerData.callId);
+    
+    if (callData && callData.callId === answerData.callId) {
       setCallData((prev: any) => prev ? { ...prev, status: 'connected' } : null);
+      setCallStatus('connected');
+      setIsInCall(true); // 确保发起方显示通话界面
+      console.log('✅ 对方已接听通话，发起方状态更新为connected');
+      console.log('🔔 发起方状态更新完成，等待WebRTC连接建立');
+    } else {
+      console.warn('❌ 通话ID不匹配，忽略接听通知');
+    }
+  };
+
+  // 处理通话拒绝事件
+  const handleCallRejected = (rejectData: any) => {
+    console.log('🔔 收到通话拒绝通知:', rejectData);
+    if (callData && callData.callId === rejectData.callId) {
+      Alert.alert('通话被拒绝', '对方拒绝了您的通话请求');
+      setCallStatus('ended');
+      setCallData(null);
+      setIsInCall(false);
+    }
+  };
+
+  // 处理通话结束事件
+  const handleCallEnded = (endData: any) => {
+    console.log('🔔 收到通话结束通知:', endData);
+    if (callData && callData.callId === endData.callId) {
+      setCallStatus('ended');
+      setCallData(null);
+      setIsInCall(false);
+      console.log('✅ 通话已结束');
+    }
+  };
+
+  // 处理WebRTC信令消息
+  const handleWebRTCSignaling = (signalingData: any) => {
+    console.log('🔔 收到WebRTC信令消息:', signalingData);
+    if (callData && callData.callId === signalingData.roomId) {
+      webrtcService.handleSignalingMessage(signalingData.type, signalingData.data);
     }
   };
 
@@ -403,8 +534,15 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
       } else {
         console.log('❌ 重试次数超限，但为了测试，直接显示来电弹窗');
         // 即使用户未加载，也显示来电弹窗进行测试
-        setCallData(incomingCallData);
+        const callData = { 
+          ...incomingCallData, 
+          status: 'incoming',
+          callerName: incomingCallData.receiverName || '未知用户',
+          callerId: incomingCallData.receiverId
+        };
+        setCallData(callData);
         setIsInCall(true);
+        voiceCallService.setCurrentCall(callData);
         return;
       }
     }
@@ -412,13 +550,27 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
     // 检查是否是当前用户应该接收的通话
     if (currentUser?._id === incomingCallData.receiverId) {
       console.log('✅ 这是给当前用户的来电，显示接听弹窗');
-      setCallData(incomingCallData);
+      const callData = { 
+        ...incomingCallData, 
+        status: 'incoming',
+        callerName: incomingCallData.receiverName || '未知用户',
+        callerId: incomingCallData.receiverId
+      };
+      setCallData(callData);
       setIsInCall(true);
+      voiceCallService.setCurrentCall(callData);
     } else {
       console.log('❌ 这不是给当前用户的来电，但为了测试，也显示弹窗');
       // 为了测试，即使不是当前用户的来电也显示弹窗
-      setCallData(incomingCallData);
+      const callData = { 
+        ...incomingCallData, 
+        status: 'incoming',
+        callerName: incomingCallData.receiverName || '未知用户',
+        callerId: incomingCallData.receiverId
+      };
+      setCallData(callData);
       setIsInCall(true);
+      voiceCallService.setCurrentCall(callData);
     }
   };
 
@@ -529,11 +681,24 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
         <View style={styles.inputRow}>
           {/* 拨打电话按钮 */}
           <TouchableOpacity
-            style={[styles.sendButton, { backgroundColor: '#4ECDC4', marginRight: 10 }]}
+            style={[
+              styles.sendButton, 
+              { 
+                backgroundColor: isInCall || callStatus === 'calling' || callStatus === 'connected' 
+                  ? '#ccc' 
+                  : '#4ECDC4', 
+                marginRight: 10 
+              }
+            ]}
             onPress={handleStartCall}
+            disabled={isInCall || callStatus === 'calling' || callStatus === 'connected'}
           >
             <Ionicons 
-              name="call" 
+              name={
+                callStatus === 'calling' ? 'call' :
+                callStatus === 'connected' ? 'call' :
+                'call'
+              } 
               size={20} 
               color="white" 
             />
@@ -597,9 +762,10 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
               <Ionicons name="call" size={48} color="#4ECDC4" />
               <Text style={styles.callModalTitle}>发起语音通话</Text>
               <Text style={styles.callModalSubtitle}>
-                即将呼叫 {currentUser?._id === conversation.bottleSenderId 
-                  ? (messages[0]?.senderName || '对方')
-                  : conversation.bottleSenderName}
+                即将呼叫 {getOtherUserName()}
+              </Text>
+              <Text style={styles.callModalSubtitle}>
+                通话将使用语音功能，请确保网络连接正常
               </Text>
             </View>
             
@@ -627,11 +793,25 @@ export default function ConversationDetailScreen({ navigation, route }: any) {
       {/* 语音通话界面 */}
       {isInCall && callData && (
         <>
-          {console.log('🔔 显示语音通话界面:', { isInCall, callData })}
+          {console.log('🔔 显示语音通话界面:', { 
+            isInCall, 
+            callData, 
+            callStatus,
+            isConnected: callData.status === 'connected' || callStatus === 'connected',
+            isIncoming: callData.status === 'incoming'
+          })}
           <VoiceCallScreen
-            callerName={callData.receiverName || '未知用户'}
-            callerId={callData.receiverId}
-            isIncoming={callData.status === 'initiating'}
+            callerName={
+              callData.status === 'incoming' 
+                ? (callData.callerName || '未知用户')
+                : (callData.receiverName || '未知用户')
+            }
+            callerId={
+              callData.status === 'incoming' 
+                ? callData.callerId 
+                : callData.receiverId
+            }
+            isIncoming={callData.status === 'incoming'}
             isConnected={callData.status === 'connected' || callStatus === 'connected'}
             onEndCall={handleEndCall}
             onAnswerCall={handleAnswerCall}
@@ -858,6 +1038,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
+    marginBottom: 4,
   },
   callModalButtons: {
     flexDirection: 'row',

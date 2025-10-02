@@ -640,7 +640,10 @@ io.on('connection', (socket) => {
   // 语音通话事件处理
   socket.on('voice-call-initiate', (callData) => {
     console.log('收到语音通话请求:', callData);
-    const { receiverId } = callData;
+    const { receiverId, callId } = callData;
+    
+    // 将用户加入通话房间
+    socket.join(callId);
     
     // 转发给接收者
     const receiverSocket = connectedUsers.get(receiverId);
@@ -656,26 +659,45 @@ io.on('connection', (socket) => {
     console.log('收到语音通话接听:', answerData);
     const { callId } = answerData;
     
-    // 这里需要根据callId找到发起者，简化处理
-    // 实际应用中应该维护通话状态
-    socket.broadcast.emit('voice-call-answered', answerData);
-    console.log('✅ 语音通话接听通知已广播');
+    // 将接听者加入通话房间
+    socket.join(callId);
+    
+    // 通知房间内其他用户通话已接听
+    socket.to(callId).emit('voice-call-answered', answerData);
+    console.log(`✅ 语音通话接听通知已发送到房间 ${callId}`);
   });
 
   socket.on('voice-call-reject', (rejectData) => {
     console.log('收到语音通话拒绝:', rejectData);
     const { callId } = rejectData;
     
-    socket.broadcast.emit('voice-call-rejected', rejectData);
-    console.log('✅ 语音通话拒绝通知已广播');
+    // 通知房间内其他用户通话被拒绝
+    socket.to(callId).emit('voice-call-rejected', rejectData);
+    console.log(`✅ 语音通话拒绝通知已发送到房间 ${callId}`);
   });
 
   socket.on('voice-call-end', (endData) => {
     console.log('收到语音通话结束:', endData);
     const { callId } = endData;
     
-    socket.broadcast.emit('voice-call-ended', endData);
-    console.log('✅ 语音通话结束通知已广播');
+    // 通知房间内其他用户通话已结束
+    socket.to(callId).emit('voice-call-ended', endData);
+    console.log(`✅ 语音通话结束通知已发送到房间 ${callId}`);
+  });
+
+  // WebRTC信令处理
+  socket.on('webrtc-signaling', (signalingData) => {
+    console.log('收到WebRTC信令:', signalingData);
+    const { type, data, roomId } = signalingData;
+    
+    // 转发信令消息给房间内的其他用户
+    socket.to(roomId).emit('webrtc-signaling', {
+      type,
+      data,
+      roomId
+    });
+    
+    console.log(`✅ WebRTC信令已转发: ${type} -> 房间 ${roomId}`);
   });
 
   // 心跳检测

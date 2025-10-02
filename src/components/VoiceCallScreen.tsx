@@ -35,12 +35,24 @@ export default function VoiceCallScreen({
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (isIncoming) {
+    console.log('🔔 VoiceCallScreen useEffect 触发:', { isIncoming, callConnected });
+    
+    if (isIncoming && !callConnected) {
+      console.log('🔔 开始播放来电铃声');
       playRingtone();
+    } else {
+      console.log('🔔 停止来电铃声');
+      stopRingtone();
     }
+    
     if (callConnected) {
+      console.log('🔔 开始通话计时');
       startTimer();
+    } else {
+      console.log('🔔 停止通话计时');
+      stopTimer();
     }
+    
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -54,11 +66,8 @@ export default function VoiceCallScreen({
   // 监听外部传入的 isConnected 状态变化
   useEffect(() => {
     console.log('🔔 VoiceCallScreen isConnected 状态变化:', isConnected);
+    console.log('🔔 当前内部状态 callConnected:', callConnected);
     setCallConnected(isConnected);
-    if (isConnected) {
-      console.log('🔔 通话已连接，开始计时');
-      startTimer();
-    }
   }, [isConnected]);
 
   const playRingtone = async () => {
@@ -78,10 +87,17 @@ export default function VoiceCallScreen({
   const stopRingtone = async () => {
     if (sound) {
       console.log('🔔 停止铃声播放');
-      await sound.stopAsync();
-      await sound.unloadAsync();
-      setSound(null);
-      console.log('✅ 铃声已停止');
+      try {
+        await sound.stopAsync();
+        await sound.unloadAsync();
+        setSound(null);
+        console.log('✅ 铃声已停止');
+      } catch (error) {
+        console.error('停止铃声失败:', error);
+        setSound(null); // 即使失败也要清空状态
+      }
+    } else {
+      console.log('🔔 没有铃声需要停止');
     }
   };
 
@@ -90,15 +106,18 @@ export default function VoiceCallScreen({
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
+    setCallDuration(0); // 重置计时器
     intervalRef.current = setInterval(() => {
       setCallDuration(prev => {
-        console.log('🔔 通话时间更新:', prev + 1);
-        return prev + 1;
+        const newDuration = prev + 1;
+        console.log('🔔 通话时间更新:', newDuration);
+        return newDuration;
       });
     }, 1000);
   };
 
   const stopTimer = () => {
+    console.log('🔔 停止通话计时器');
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
@@ -108,8 +127,8 @@ export default function VoiceCallScreen({
   const handleAnswerCall = async () => {
     try {
       console.log('🔔 接听通话，停止铃声');
-      await stopRingtone();
-      setCallConnected(true);
+      
+      // 先调用父组件的接听方法
       onAnswerCall?.();
       
       await Audio.setAudioModeAsync({
@@ -119,7 +138,7 @@ export default function VoiceCallScreen({
         playThroughEarpieceAndroid: false,
       });
       
-      console.log('✅ 通话已接听，铃声已停止');
+      console.log('✅ 通话已接听');
     } catch (error) {
       console.error('接听通话失败:', error);
       Alert.alert('错误', '接听通话失败');
@@ -141,7 +160,9 @@ export default function VoiceCallScreen({
 
   const handleMuteToggle = async () => {
     try {
-      setIsMuted(!isMuted);
+      const newMutedState = !isMuted;
+      setIsMuted(newMutedState);
+      console.log('🔔 静音状态切换:', newMutedState ? '静音' : '开启');
     } catch (error) {
       console.error('切换静音失败:', error);
     }
@@ -149,12 +170,15 @@ export default function VoiceCallScreen({
 
   const handleSpeakerToggle = async () => {
     try {
-      setIsSpeakerOn(!isSpeakerOn);
+      const newSpeakerState = !isSpeakerOn;
+      setIsSpeakerOn(newSpeakerState);
+      console.log('🔔 扬声器状态切换:', newSpeakerState ? '扬声器' : '听筒');
+      
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
         shouldDuckAndroid: true,
-        playThroughEarpieceAndroid: !isSpeakerOn,
+        playThroughEarpieceAndroid: !newSpeakerState,
       });
     } catch (error) {
       console.error('切换扬声器失败:', error);
@@ -181,10 +205,18 @@ export default function VoiceCallScreen({
         <Text style={styles.callStatus}>
           {isIncoming && !callConnected
             ? '来电中...'
+            : !isIncoming && !callConnected
+            ? '正在呼叫...'
             : callConnected
             ? `通话中 ${formatDuration(callDuration)}`
             : '通话结束'}
         </Text>
+        {console.log('🔔 VoiceCallScreen 状态显示:', {
+          isIncoming,
+          callConnected,
+          callDuration,
+          isConnected: isConnected
+        })}
       </View>
 
       <View style={styles.controls}>
@@ -199,6 +231,15 @@ export default function VoiceCallScreen({
             <TouchableOpacity
               style={[styles.controlButton, styles.answerButton]}
               onPress={handleAnswerCall}
+            >
+              <Ionicons name="call" size={30} color="white" />
+            </TouchableOpacity>
+          </View>
+        ) : !isIncoming && !callConnected ? (
+          <View style={styles.callingControls}>
+            <TouchableOpacity
+              style={[styles.controlButton, styles.hangupButton]}
+              onPress={handleEndCall}
             >
               <Ionicons name="call" size={30} color="white" />
             </TouchableOpacity>
@@ -257,27 +298,27 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 100,
+    paddingTop: 80,
   },
   avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#4ECDC4',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 30,
+    marginBottom: 20,
   },
   avatarText: {
-    fontSize: 48,
+    fontSize: 32,
     fontWeight: 'bold',
     color: 'white',
   },
   userName: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: 'white',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   callStatus: {
     fontSize: 16,
@@ -290,6 +331,11 @@ const styles = StyleSheet.create({
   incomingControls: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  callingControls: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
   },
   activeControls: {
@@ -310,6 +356,12 @@ const styles = StyleSheet.create({
   },
   declineButton: {
     backgroundColor: '#FF6B6B',
+  },
+  hangupButton: {
+    backgroundColor: '#FF6B6B',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
   },
   endButton: {
     backgroundColor: '#FF6B6B',
